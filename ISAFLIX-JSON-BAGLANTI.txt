@@ -1,0 +1,246 @@
+                        updated.put(item);
+                    }
+                }
+
+                if (favorite) updated.put(channel);
+
+                prefs.edit().putString("favorites", updated.toString()).apply();
+            } catch (Exception e) {
+                Log.e(TAG, "Favori kaydedilemedi", e);
+            }
+        }
+
+
+        private void reportCatalogProgress(
+            String callbackId, String stage, int percent
+        ) {
+            final String id = callbackId == null
+                ? "0" : callbackId.replaceAll("[^0-9]", "");
+            final int value = Math.max(0, Math.min(100, percent));
+
+            runOnUiThread(() -> {
+                if (webView == null) return;
+                webView.evaluateJavascript(
+                    "if(window.__isaCatalogProgress)window.__isaCatalogProgress(" +
+                    JSONObject.quote(id) + "," +
+                    JSONObject.quote(stage) + "," + value + ");",
+                    null
+                );
+            });
+        }
+
+        @JavascriptInterface
+        public String readCatalogChunk(String offsetText, int requestedBytes) {
+            try {
+                long offset = Long.parseLong(offsetText);
+
+                java.io.File file = new java.io.File(
+                    getCacheDir(), "isaflix-web-katalog.json"
+                );
+
+                if (!file.isFile() || offset < 0 ||
+                    offset >= file.length()) {
+                    return "";
+                }
+
+                int size = Math.max(1024,
+                    Math.min(65536, requestedBytes));
+
+                int count = (int)Math.min(
+                    (long) size, file.length() - offset
+                );
+
+                byte[] buffer = new byte[count];
+
+                try (java.io.RandomAccessFile input =
+                         new java.io.RandomAccessFile(file, "r")) {
+                    input.seek(offset);
+                    input.readFully(buffer);
+                }
+
+                return android.util.Base64.encodeToString(
+                    buffer,
+                    android.util.Base64.NO_WRAP
+                );
+
+            } catch (Exception e) {
+                Log.e(TAG, "Catalog parça okuma hatası", e);
+                return "";
+            }
+        }
+
+
+        @JavascriptInterface
+        public void loadCachedCatalogCatalog(String callbackId) {
+            final String id = callbackId == null
+                ? "0" : callbackId.replaceAll("[^0-9]", "");
+
+            java.io.File cache = new java.io.File(
+                getCacheDir(), "isaflix-web-katalog.json"
+            );
+
+            final boolean exists =
+                cache.isFile() && cache.length() > 0;
+
+            final long size = exists ? cache.length() : 0L;
+
+            runOnUiThread(() -> {
+                if (webView == null) return;
+
+                if (exists) {
+                    webView.evaluateJavascript(
+                        "window.__isaCatalogReady(" +
+                        JSONObject.quote(id) + "," +
+                        size + ",null,false);",
+                        null
+                    );
+                } else {
+                    webView.evaluateJavascript(
+                        "window.__isaCatalogDone(" +
+                        JSONObject.quote(id) +
+                        ",null,'CACHE_EMPTY');",
+                        null
+                    );
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void fetchCatalogCatalog(String callbackId) {
+            networkExecutor.execute(() -> {
+                String error = null;
+                boolean notModified = false;
+
+                HttpURLConnection connection = null;
+
+                try {
+                    java.io.File cache = new java.io.File(
+                        getCacheDir(), "isaflix-web-katalog.json"
+                    );
+
+                    android.content.SharedPreferences prefs =
+                        getSharedPreferences("isaflix_web_catalog", MODE_PRIVATE);
+
+                    String etag = prefs.getString("etag", "");
+                    String modified = prefs.getString("modified", "");
+
+                    URL url = new URL(
+                        "https://raw.githubusercontent.com/thechampisher/ISA-TV-HD/main/INCELEME/isaflix-web-katalog.json"
+                    );
+
+                    connection = (HttpURLConnection) url.openConnection();
+                    connection.setConnectTimeout(20000);
+                    connection.setReadTimeout(180000);
+                    connection.setRequestMethod("GET");
+                    connection.setInstanceFollowRedirects(true);
+                    connection.setRequestProperty("Accept-Encoding", "identity");
+                    connection.setRequestProperty("User-Agent", "ISA-TV-HD/1.0");
+
+                    if (!etag.isEmpty())
+                        connection.setRequestProperty("If-None-Match", etag);
+
+                    if (!modified.isEmpty())
+                        connection.setRequestProperty("If-Modified-Since", modified);
+
+                    int status = connection.getResponseCode();
+
+                    if (status == 304 && cache.isFile() && cache.length() > 0) {
+                        notModified = true;
+                    } else if (status >= 200 && status < 300) {
+                        java.io.File encrypted = new java.io.File(
+                            getCacheDir(), "catalog-catalog.download"
+                        );
+
+                        long totalBytes = connection.getContentLengthLong();
+                        long downloaded = 0;
+                        int lastPercent = -1;
+                        long lastReport = 0;
+
+                        reportCatalogProgress(callbackId, "download", 0);
+
+                        try (
+                            java.io.InputStream in = connection.getInputStream();
+                            java.io.FileOutputStream out =
+                                new java.io.FileOutputStream(encrypted)
+                        ) {
+                            byte[] buffer = new byte[65536];
+                            int n;
+
+                            while ((n = in.read(buffer)) != -1) {
+                                out.write(buffer, 0, n);
+                                downloaded += n;
+
+                                int percent = totalBytes > 0
+    ? (int)Math.min(70, downloaded * 70L / totalBytes)
+    : 0;
+
+                                long now = android.os.SystemClock.elapsedRealtime();
+
+                                if (percent != lastPercent &&
+                                    (now - lastReport >= 150 || percent == 100)) {
+                                    reportCatalogProgress(
+                                        callbackId, "download", percent
+                                    );
+                                    lastPercent = percent;
+                                    lastReport = now;
+                                }
+                            }
+
+                            out.getFD().sync();
+                        }
+
+                        reportCatalogProgress(callbackId, "load", 70);
+
+                        decryptCatalogFile(encrypted, cache, callbackId);
+                        encrypted.delete();
+
+                        String newEtag = connection.getHeaderField("ETag");
+                        String newModified = connection.getHeaderField("Last-Modified");
+
+                        android.content.SharedPreferences.Editor edit = prefs.edit();
+                        if (newEtag != null) edit.putString("etag", newEtag);
+                        if (newModified != null) edit.putString("modified", newModified);
+                        edit.apply();
+
+                    } else {
+                        throw new java.io.IOException("Catalog HTTP " + status);
+                    }
+
+                } catch (Exception ex) {
+                    error = ex.getMessage() == null
+                        ? "Catalog kataloğu alınamadı." : ex.getMessage();
+
+                    Log.e(TAG, "Catalog katalog hatası", ex);
+                } finally {
+                    if (connection != null) connection.disconnect();
+                }
+
+                final String failure = error;
+                final boolean finalNotModified = notModified;
+                final String id = callbackId == null
+                    ? "0" : callbackId.replaceAll("[^0-9]", "");
+
+                final java.io.File catalogFile = new java.io.File(
+                    getCacheDir(), "isaflix-web-katalog.json"
+                );
+
+                final long catalogSize =
+                    failure == null && catalogFile.isFile()
+                    ? catalogFile.length() : 0L;
+
+                runOnUiThread(() -> {
+                    if (webView == null) return;
+
+                    webView.evaluateJavascript(
+                        "window.__isaCatalogReady(" + id + "," +
+                        catalogSize + "," +
+                        JSONObject.quote(failure) + "," +
+                        (finalNotModified ? "true" : "false") + ");",
+                        null
+                    );
+                });
+            });
+        }
+
+        private String readUtf8File(java.io.File file) throws Exception {
+            StringBuilder result = new StringBuilder();
