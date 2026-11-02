@@ -1,0 +1,2037 @@
+506:         window.location.href = './player.html';
+522:             window.location.href = `./player.html?${query.toString()}`;
+574:     resolveRelayProbeBase() {
+646:                 const upgradedUrl = url.replace(/^http:\/\//i, 'https://');
+673:         if (window.location.protocol === 'https:' && /^http:\/\//i.test(url)) {
+730:     // Make sure no conflicting player initialization occurs
+731:     if (typeof window.netflixPlayer === 'undefined') {
+737:         console.warn('⚠️ Player already initialized - skipping homepage initialization');
+
+======================================================================
+DOSYA: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-player-source.js
+SATIR SAYISI: 2
+2: // doğrudan Media3 PlayerActivity'ye aktarılır. Eski Worker yönlendirmesi kapatıldı.
+
+======================================================================
+DOSYA: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js
+SATIR SAYISI: 3345
+25:     else cb.resolve(value);
+33:     else cb.resolve(value);
+37: let catalogRequestId = 0;
+38: let catalogTimerStarted = false;
+39: let catalogLastData = null;
+40: let catalogHasCache = false;
+41: let catalogLoading = false;
+42: let catalogInFlight = null;
+44: window.__isaCatalogCallbacks = {};
+48: function isaCatalogProgressElement() {
+50:         'isa-catalog-progress-overlay'
+55:         element.id = 'isa-catalog-progress-overlay';
+62:             '<div id="isa-catalog-fill" style="' +
+65:             '<div id="isa-catalog-percent" style="' +
+77: function isaCatalogHideProgress() {
+79:         'isa-catalog-progress-overlay'
+85: window.__isaCatalogProgress = function(id, stage, percent) {
+86:     if (catalogHasCache) return;
+88:     const root = isaCatalogProgressElement();
+93:     root.querySelector('#isa-catalog-fill').style.width =
+96:     root.querySelector('#isa-catalog-percent').textContent =
+100: window.__isaCatalogDone = function(id, value, error) {
+101:     const callback = window.__isaCatalogCallbacks[id];
+104:     delete window.__isaCatalogCallbacks[id];
+107:         isaCatalogHideProgress();
+110:         callback.resolve(value);
+114: window.__isaCatalogReady = function(id, totalBytes, error, notModified) {
+116:         window.__isaCatalogDone(id, null, error);
+120:     const callback = window.__isaCatalogCallbacks[id];
+124:     if (notModified && catalogLastData &&
+125:         typeof catalogLastData === 'object') {
+126:         window.__isaCatalogDone(id, catalogLastData, null);
+131:         typeof window.ISATV.readCatalogChunk !== 'function') {
+132:         window.__isaCatalogDone(
+133:             id, null, 'Java Catalog parça bağlantısı bulunamadı.'
+139:         window.__isaCatalogDone(
+140:             id, null, 'Catalog kataloğu boş.'
+152:             const encoded = window.ISATV.readCatalogChunk(
+157:                 throw new Error('Catalog veri parçası boş geldi.');
+179:             window.__isaCatalogProgress(id, 'load', percent);
+188:             window.__isaCatalogDone(
+195:             window.__isaCatalogDone(
+197:                 'Catalog aktarım hatası: ' + e.message
+206: function loadCachedCatalogCatalog() {
+208:         typeof window.ISATV.loadCachedCatalogCatalog !== 'function') {
+209:         return Promise.resolve(null);
+212:     catalogHasCache = true;
+214:     return new Promise(resolve => {
+215:         const id = ++catalogRequestId;
+217:         window.__isaCatalogCallbacks[id] = {
+218:             resolve: value => {
+228:                     catalogLastData = parsed;
+229:                     window.ISA_Catalog_CATALOG = parsed;
+230:                     catalogHasCache = true;
+231:                     resolve(parsed);
+234:                     catalogHasCache = false;
+235:                     resolve(null);
+240:                 catalogHasCache = false;
+241:                 resolve(null);
+246:             window.ISATV.loadCachedCatalogCatalog(String(id));
+248:             delete window.__isaCatalogCallbacks[id];
+249:             catalogHasCache = false;
+250:             resolve(null);
+255: function fetchCatalogCatalog() {
+256:     if (catalogInFlight) return catalogInFlight;
+258:     if (!window.ISATV || !window.ISATV.fetchCatalogCatalog) {
+260:             new Error('Catalog native bağlantısı kullanılamıyor.')
+264:     catalogLoading = true;
+266:     catalogInFlight = new Promise((resolve, reject) => {
+267:         const id = ++catalogRequestId;
+269:         window.__isaCatalogCallbacks[id] = {
+270:             resolve: value => {
+275:                         throw new Error('Boş veya geçersiz katalog.');
+277:                     catalogLastData = parsed;
+278:                     window.__isaCatalogProgress(id, "parse", 100);
+279:                     setTimeout(isaCatalogHideProgress, 180);
+280:                     catalogHasCache = true;
+281:                     resolve(parsed);
+283:                     reject(new Error('Catalog JSON doğrulaması başarısız: ' + e.message));
+285:                     catalogLoading = false;
+286:                     catalogInFlight = null;
+290:                 catalogLoading = false;
+291:                 catalogInFlight = null;
+297:             window.ISATV.fetchCatalogCatalog(String(id));
+299:             delete window.__isaCatalogCallbacks[id];
+300:             catalogLoading = false;
+301:             catalogInFlight = null;
+306:     return catalogInFlight;
+309: async function refreshCatalogCatalog(silent=false) {
+311:         const previousData = catalogLastData;
+312:         const data = await fetchCatalogCatalog();
+316:         window.ISA_Catalog_CATALOG = data;
+318:             'isa:catalog-catalog-updated',
+324:             if (status) status.textContent = 'Catalog kataloğu güncellendi.';
+329:         console.error('Catalog katalog güncellemesi:', error);
+334:                 'Catalog güncellenemedi: ' + error.message;
+337:         return catalogLastData;
+342: function startCatalogAutoUpdate() {
+343:     if (catalogTimerStarted) return;
+344:     catalogTimerStarted = true;
+346:     loadCachedCatalogCatalog().then(cached => {
+349:                 'isa:catalog-catalog-updated',
+354:         refreshCatalogCatalog(true);
+359:             refreshCatalogCatalog(true);
+367:             return Promise.resolve(localStorage.getItem('isa-cache:'+key));
+369:             return Promise.resolve(null);
+373:     return new Promise((resolve,reject) => {
+375:         window.__isaCacheCallbacks[id] = {resolve,reject};
+397:     return new Promise((resolve,reject) => {
+399:         window.__isaFetchCallbacks[id] = {resolve,reject};
+411:     return new Promise((resolve,reject) => {
+413:         window.__isaFetchCallbacks[id] = {resolve,reject};
+492:     name = name.replace(/\s*(?:[-–|·]\s*)?(?:S\s*\d{1,2}\s*E\s*\d{1,3}|Sezon\s*\d+\s*[-–:]?\s*\d+\s*\.?(?:bölüm|bolum)|\d+\s*\.?\s*(?:bölüm|bolum|episode))\s*$/i, '');
+496: function cleanEpisodeTitle(value, fallbackNumber) {
+498:     const match = name.match(/(?:^|\s)(\d+)\s*\.?\s*(?:bölüm|bolum|episode)\s*$/i);
+603:     location.href = './player.html?'+query.toString();
+607: /* ISAFLIX_QUEUE_V2 */
+608: function playIsaFlix(name, url, headers={}, queue=[], index=0) {
+617:             name:name || 'İSAFLIX',
+620:             season:0,
+621:             episode:0,
+632:         typeof window.ISATV.playIsaflix === 'function') {
+633:         window.ISATV.playIsaflix(
+634:             cleanMediaTitle(name || 'İSAFLIX'),
+644:         name:name || 'İSAFLIX',
+647:         group:'İSAFLIX',
+969:         host + '/player_api.php?' + params.toString(),
+992:         host = 'http://' + host;
+1099:     async function resolveMagLink(row) {
+1109:             series:'0',
+1126:         const resolved = await Promise.all(batch.map(async (row,localIndex) => {
+1128:                 const url = await resolveMagLink(row);
+1143:         for (const item of resolved) {
+1187:             'Tam Xtream sistemiyle film ve dizileri de yüklemek için ' +
+1266:  * Dizi nesnesinin episodes/seasons yapısı kaybolmaz.
+1284:     const episodes = Array.isArray(data.episodes) ? data.episodes : [];
+1285:     const seasons = Array.isArray(data.seasons) ? data.seasons : [];
+1288:     if (title && (url || episodes.length || seasons.length || items.length ||
+1290:                   String(data.type || '').toLowerCase().includes('series'))) {
+1306:             episodes:episodes,
+1307:             seasons:seasons,
+1324: function itemIsSeries(item) {
+1325:     return (Array.isArray(item.episodes) && item.episodes.length > 0) ||
+1326:            (Array.isArray(item.seasons) && item.seasons.length > 0) ||
+1328:            String(item.type || '').includes('series');
+1351:     const films = [];
+1352:     const series = [];
+1357:         if (itemIsSeries(items[i])) series.push(entry);
+1358:         else films.push(entry);
+1368:         ${series.length ? '<h3>Diziler</h3><div id="isa-series-grid" class="isa-provider-grid"></div>' : ''}
+1369:         ${films.length ? '<h3 style="margin-top:25px">Filmler ve diğer içerikler</h3><div id="isa-films-grid" class="isa-provider-grid"></div>' : ''}
+1391:                 const kind = itemIsSeries(item) ? 'series' : 'film';
+1398:                     if (kind === 'series') {
+1400:                             openXtreamSeries(item,provider);
+1402:                             showSeries(item,provider);
+1421:     renderBatch(series,'isa-series-grid');
+1422:     renderBatch(films,'isa-films-grid');
+1428:             ${item.logo ? `<img src="${esc(item.logo)}" alt="" onerror="this.style.display='none'">` : '<i class="fas fa-film" style="font-size:35px;padding:25px"></i>'}
+1449:             const [films,series,filmCategories,seriesCategories] = await Promise.all([
+1451:                 xtreamAPI(provider,'get_series'),
+1453:                 xtreamAPI(provider,'get_series_categories').catch(() => [])
+1456:             const filmMap = new Map();
+1457:             for (const category of (Array.isArray(filmCategories) ? filmCategories : [])) {
+1458:                 filmMap.set(String(category.category_id),category.category_name || 'Filmler');
+1460:             const seriesMap = new Map();
+1461:             for (const category of (Array.isArray(seriesCategories) ? seriesCategories : [])) {
+1462:                 seriesMap.set(String(category.category_id),category.category_name || 'Diziler');
+1465:             for (const item of (Array.isArray(films) ? films : [])) {
+1468:                     type:'film',
+1469:                     name:item.name || 'Film',
+1470:                     title:item.name || 'Film',
+1471:                     category:filmMap.get(String(item.category_id)) || 'Filmler',
+1473:                         '/movie/' + encodeURIComponent(provider.username) + '/' +
+1481:             for (const item of (Array.isArray(series) ? series : [])) {
+1484:                     type:'series',
+1487:                     category:seriesMap.get(String(item.category_id)) || 'Diziler',
+1498:                     ...item,title:item.name,logo:item.logo,episodes:[],seasons:[],type:'film'
+1518: async function openXtreamSeries(series,provider) {
+1523:         const info = await xtreamAPI(provider, 'get_series_info', {
+1524:             series_id:series.series_id
+1527:         const rawEpisodes = info.episodes || {};
+1528:         const seasons = info.seasons || [];
+1529:         const episodes = [];
+1531:         if (Array.isArray(rawEpisodes)) {
+1532:             for (const episode of rawEpisodes) episodes.push(episode);
+1534:             Object.values(rawEpisodes).forEach(list => {
+1535:                 if (Array.isArray(list)) { for (const episode of list) episodes.push(episode); }
+1541:         for (const episode of episodes) {
+1542:             const season = Number(
+1543:                 episode.season || episode.season_number || 1
+1546:             if (!grouped.has(season)) grouped.set(season, []);
+1548:             const ext = episode.container_extension || 'mp4';
+1550:             grouped.get(season).push({
+1551:                 ...episode,
+1552:                 name:episode.title || episode.name || 'Bölüm',
+1553:                 title:episode.title || episode.name || 'Bölüm',
+1555:                     '/series/' +
+1558:                     episode.id + '.' + ext
+1562:         const seasonNumbers = Array.from(grouped.keys()).sort((a,b) => a-b);
+1566:                 <button class="isa-back" id="isa-xtream-series-back">
+1569:                 <h2>${esc(series.name)}</h2>
+1572:                 ${seasonNumbers.map((number,index) => `
+1574:                             data-xseason="${index}">
+1584:         document.getElementById('isa-xtream-series-back').onclick =
+1587:         area.querySelectorAll('[data-xseason]').forEach(button => {
+1588:             button.onclick = () => showEpisodes(
+1589:                 grouped.get(seasonNumbers[
+1590:                     Number(button.dataset.xseason)
+1592:                 series,
+1597:         if (!seasonNumbers.length) {
+1609: function seasonNumber(item) {
+1610:     const explicit = item.season_number ?? item.season;
+1618:         /(?:^|\b)(\d+)\s*\.?\s*(?:sezon|season)\b/i,
+1619:         /(?:season|sezon)\s*0*(\d+)/i,
+1633: function showSeries(series,provider) {
+1635:     let episodes = series.episodes || [];
+1636:     const seasons = series.seasons || [];
+1638:     if (seasons.length) {
+1639:         const grouped = seasons.map((season,index) => ({
+1640:             number:season.number||season.season||index+1,
+1641:             episodes:season.episodes||[]
+1646:                 <button class="isa-back" id="isa-series-back"><i class="fas fa-arrow-left"></i> Geri</button>
+1647:                 <h2>${esc(series.name)}</h2>
+1649:             ${series.poster ? `<img src="${esc(series.poster)}" style="width:130px;max-height:180px;object-fit:contain">` : ''}
+1651:                 ${grouped.map((season,index) => `
+1652:                     <button class="isa-provider-card" data-season="${index}">
+1654:                         <strong>${esc('Sezon '+season.number)}</strong>
+1655:                         <small>${season.episodes.length} bölüm</small>
+1661:         document.getElementById('isa-series-back').onclick = () => openVODProvider(provider);
+1663:         area.querySelectorAll('[data-season]').forEach(button => {
+1664:             button.onclick = () => showEpisodes(
+1665:                 grouped[Number(button.dataset.season)].episodes,
+1666:                 series,
+1674:     if (!episodes.length) episodes = series.items || [];
+1676:     if (!episodes.length) {
+1679:                 <button class="isa-back" id="isa-series-back">Geri</button>
+1680:                 <h2>${esc(series.name)}</h2>
+1684:         document.getElementById('isa-series-back').onclick = () => openVODProvider(provider);
+1690:     episodes.forEach(episode => {
+1691:         const number = seasonNumber(episode);
+1693:         grouped.get(number).push(episode);
+1699:                 <button class="isa-back" id="isa-series-back">Geri</button>
+1700:                 <h2>${esc(series.name)}</h2>
+1704:                     <button class="isa-provider-card" data-season="${index}">
+1714:         document.getElementById('isa-series-back').onclick = () => openVODProvider(provider);
+1716:         area.querySelectorAll('[data-season]').forEach(button => {
+1717:             button.onclick = () => showEpisodes(values[Number(button.dataset.season)],series,provider);
+1720:         showEpisodes(episodes,series,provider);
+1724: function showEpisodes(episodes,series,provider) {
+1729:             <button class="isa-back" id="isa-episodes-back">
+1732:             <h2>${esc(series.name)}</h2>
+1735:             ${episodes.map((episode,index) => `
+1736:                 <button class="isa-provider-card" data-episode="${index}">
+1738:                     <strong>${esc(episode.title||episode.name||('Bölüm '+(index+1)))}</strong>
+1739:                     <small>${esc(episode.date||'Bölümü aç')}</small>
+1745:     document.getElementById('isa-episodes-back').onclick = () => showSeries(series,provider);
+1747:     area.querySelectorAll('[data-episode]').forEach(button => {
+1748:         button.onclick = () => openVODItem(episodes[Number(button.dataset.episode)]);
+1753: async function resolveStaticMedia(page, depth=0, visited=new Set()) {
+1790:     // Yalnızca sayfada açıkça belirtilmiş iframe adreslerini kontrol et.
+1791:     const iframePattern = /<iframe[^>]+src=["']([^"']+)["']/ig;
+1792:     let iframe;
+1794:     while ((iframe = iframePattern.exec(html)) !== null) {
+1796:             const child = new URL(iframe[1],page).href;
+1799:             const found = await resolveStaticMedia(
+1851:         const resolved = await resolveStaticMedia(page);
+1855:         if (!resolved) {
+1866:             url:resolved,
+1883: async function openIsaFlixVODItem(item) {
+1895:     const name = item.title || item.name || 'İSAFLIX';
+1901:         playIsaFlix(name, media, headers, item.queue || [], item.queueIndex || 0);
+1912:     const root = isaFlixRoot();
+1921:         const resolved = await resolveStaticMedia(page);
+1925:         if (!resolved) {
+1934:         playIsaFlix(name, resolved, headers, item.queue || [], item.queueIndex || 0);
+1938:         console.error('İSAFLIX video çözümleme:', error);
+1974:     // Film ve dizi panelleri kaynakları hesap bazında ayrı tutar.
+1975:     renderMediaPanel('film');
+1976:     renderMediaPanel('series');
+1991:                    type="url" placeholder="https://site.com/list.m3u">
+2000:                    placeholder="http://sunucu.com veya http://sunucu.com:8080">
+2038:                    placeholder="http://portal.site.com">
+2235:             if (button.dataset.tab === 'isa-films-panel') renderMediaPanel('film');
+2236:             if (button.dataset.tab === 'isa-series-panel') renderMediaPanel('series');
+2243: // === İSA TV HD: bağımsız film/dizi kaynakları ve kategori gezintisi ===
+2244: const isaMediaMemory = { film: new Map(), series: new Map() };
+2248:         kind === 'film' ? 'isa-films-content' : 'isa-series-content'
+2260:         root.innerHTML = '<p class="isa-empty-state">Aktif hesap film ve dizi içeriklerini desteklemiyor.</p>';
+2268:     root.innerHTML = `<div class="isa-vod-toolbar"><h2>${esc(source.name||'Liste')}</h2></div><div class="isa-provider-grid">${Array.from(groups.keys()).map((g,i)=>`<button class="isa-provider-card" data-media-cat="${i}"><i class="fas ${kind==='film'?'fa-folder-open':'fa-folder'}"></i><strong>${esc(cleanGroupTitle(g))}</strong><small>${groups.get(g).length} içerik</small></button>`).join('')}</div>${groups.size?'':'<p class="isa-vod-note">Bu kaynakta bu türde içerik bulunamadı.</p>'}`;
+2286:             const action = kind === 'film' ? 'get_vod_streams' : 'get_series';
+2287:             const catAction = kind === 'film' ? 'get_vod_categories' : 'get_series_categories';
+2291:                 name:x.name || (kind==='film'?'Film':'Dizi'),
+2295:                 url:kind==='film' ? source.host.replace(/\/+$/,'')+'/movie/'+encodeURIComponent(source.username)+'/'+encodeURIComponent(source.password)+'/'+x.stream_id+'.'+(x.container_extension||'mp4') : ''
+2304:                 return kind==='film' ? /film|movie|sinema/.test(g+' '+n) : /dizi|series|season|sezon|episode|bölüm/.test(g+' '+n);
+2317: const isaSeriesMetaCache = new Map();
+2319: async function isaGetSeriesMeta(item) {
+2320:     const id = item.raw && item.raw.series_id;
+2323:     if (isaSeriesMetaCache.has(key)) return isaSeriesMetaCache.get(key);
+2324:     const info = await xtreamAPI(item.source,'get_series_info',{series_id:id});
+2325:     const eps = info && info.episodes ? info.episodes : {};
+2326:     const seasonKeys = Array.isArray(eps) ? ['1'] : Object.keys(eps);
+2327:     let total = 0, maxSeason = 0;
+2328:     for (const k of seasonKeys) {
+2332:         if (Number.isFinite(n)) maxSeason = Math.max(maxSeason,n);
+2333:         for (const ep of list) maxSeason = Math.max(maxSeason,Number(ep.season||ep.season_number||0)||0);
+2335:     const seasons = Array.isArray(info.seasons) ? info.seasons : [];
+2336:     for (const season of seasons) maxSeason = Math.max(maxSeason,Number(season.season_number||season.season||0)||0);
+2337:     const result = {maxSeason,total};
+2338:     isaSeriesMetaCache.set(key,result);
+2342: async function isaFillSeriesMeta(items,root) {
+2349:             if (!card || !item || !item.raw || !item.raw.series_id) continue;
+2353:                 const meta=await isaGetSeriesMeta(item);
+2355:                     const seasonText=meta.maxSeason ? `Sezon ${meta.maxSeason}` : 'Sezon bilgisi yok';
+2368:         items.map((item,i)=>`<button class="isa-provider-card" data-media-item="${i}">${item.logo?`<img src="${esc(item.logo)}" alt="" loading="lazy" decoding="async" onerror="this.style.display='none'">`:'<i class="fas '+(kind==='film'?'fa-film':'fa-tv')+'" style="font-size:30px;padding:16px"></i>'}<strong>${esc(cleanMediaTitle(item.name))}</strong><small>${kind==='film'?'Filmi oynat':(source.type==='xtream'?'Dizi bilgileri alınıyor...':'Diziyi aç')}</small></button>`).join('')
+2371:     if (kind==='series' && source.type==='xtream') isaFillSeriesMeta(items,root);
+2374:         if(kind==='film') {
+2375:             if(!isHttp(item.url)) { alert('Bu film için geçerli yayın bağlantısı bulunamadı.'); return; }
+2379:             openMediaSeries(item,source,root,kind,category);
+2381:             if(isHttp(item.url)) { const queue=items.filter(x=>isHttp(x.url)).map((x,i)=>({name:cleanMediaTitle(x.name),url:x.url,logo:x.logo||'',group:category,season:x.season||0,episode:i+1,headers:x.headers||{}})); const idx=queue.findIndex(x=>x.url===item.url); play(queue[idx],queue,Math.max(0,idx),false); }
+2387: async function openMediaSeries(series,source,root,kind,category) {
+2390:         const info=await xtreamAPI(source,'get_series_info',{series_id:series.raw.series_id});
+2391:         const raw=info.episodes||{}, all=[];
+2394:         const seasons=new Map();
+2396:             const sn=Number(ep.season||ep.season_number||1);
+2397:             if(!seasons.has(sn)) seasons.set(sn,[]);
+2399:             seasons.get(sn).push({name:(Number(ep.episode_num||ep.episode_number||seasons.get(sn).length+1))+'. Bölüm',season:sn,episode:Number(ep.episode_num||ep.episode_number||seasons.get(sn).length+1),url:source.host.replace(/\/+$/,'')+'/series/'+encodeURIComponent(source.username)+'/'+encodeURIComponent(source.password)+'/'+ep.id+'.'+ext});
+2401:         const nums=Array.from(seasons.keys()).sort((a,b)=>a-b);
+2402:         root.innerHTML=`<div class="isa-vod-toolbar"><button class="isa-back" data-series-back>Kategoriler</button><h2>${esc(series.name)}</h2></div><div class="isa-provider-grid">${nums.map((n,i)=>`<button class="isa-provider-card" data-season="${i}"><strong>Sezon ${n}</strong><small>${seasons.get(n).length} bölüm</small></button>`).join('')}</div>`;
+2403:         root.querySelector('[data-series-back]').onclick=()=>openMediaSource(source,kind,root);
+2404:         root.querySelectorAll('[data-season]').forEach(b=>b.onclick=()=>{
+2405:             const episodes=seasons.get(nums[Number(b.dataset.season)]);
+2406:             root.innerHTML=`<div class="isa-vod-toolbar"><button class="isa-back" data-episode-back>Sezonlar</button><h2>${esc(series.name)} · Sezon ${nums[Number(b.dataset.season)]}</h2></div><div class="isa-provider-grid">${episodes.map((ep,i)=>`<button class="isa-provider-card" data-ep="${i}"><i class="fas fa-circle-play" style="font-size:28px;padding:14px"></i><strong>${esc(ep.name)}</strong><small>Bölümü oynat</small></button>`).join('')}</div>`;
+2407:             root.querySelector('[data-episode-back]').onclick=()=>openMediaSeries(series,source,root,kind,category);
+2408:             root.querySelectorAll('[data-ep]').forEach(x=>x.onclick=()=>{const ep=episodes[Number(x.dataset.ep)];const queue=episodes.map((e,i)=>({name:cleanMediaTitle(series.name),url:e.url,group:category,season:e.season,episode:e.episode,headers:{}})); const idx=Number(x.dataset.ep); play(queue[idx],queue,idx,false);});
+2444: // İSA FLIX - Catalog TAM KATALOG
+2445: // Canlı TV + Filmler + Diziler
+2448: const isaFlixState = {
+2449:     mode: 'movies',
+2455:     series: null,
+2456:     season: null
+2459: const ISAFLIX_WEB_SOURCES = [
+2460:     {id:'dizipal',url:'https://dizipal2145.com/',kind:'mixed'},
+2461:     {id:'ddizi',url:'https://www.ddizi.tel/',kind:'series'},
+2462:     {id:'hdfilmcehennemi',url:'https://hdfilmcehennemi.mobi/',kind:'movie'},
+2463:     {id:'hdfilmcehennemi-nl',url:'https://www.hdfilmcehennemi.nl/',kind:'movie'},
+2464:     {id:'hdfilmizle-vip',url:'https://www.hdfilmizle.vip/',kind:'movie'},
+2465:     {id:'hdfilmizle-live',url:'https://www.hdfilmizle.live/',kind:'movie'},
+2466:     {id:'fullhdfilmizlesene',url:'https://www.fullhdfilmizlesene.now/',kind:'movie'}
+2469: const ISAFLIX_WEB_CACHE_KEY = 'isaflix-web-discovery-v1';
+2471: function isaFlixCatalog() {
+2472:     return window.__ISAFLIX_WEB_CATALOG || {movies:[],series:[]};
+2475: function isaFlixNormalizeTitle(value) {
+2486: function isaFlixDiscoverType(text, sourceKind) {
+2488:     if (/dizi|series|sezon|season|episode|bölüm|bolum|tv-show/.test(value))
+2489:         return 'series';
+2490:     if (/film|movie|sinema|full-hd/.test(value))
+2491:         return 'movie';
+2492:     return sourceKind === 'series' ? 'series' :
+2493:            sourceKind === 'movie' ? 'movie' : '';
+2496: function isaFlixPosterFromAnchor(anchor, baseUrl) {
+2506:         return /^https?:$/.test(url.protocol) ? url.href : '';
+2512: async function isaFlixDiscoverOneSource(source) {
+2532:             const image = isaFlixPosterFromAnchor(anchor, base.href);
+2533:             const title = isaFlixNormalizeTitle(
+2544:             const type = isaFlixDiscoverType(
+2562:                 category_name:type === 'series' ? 'Diziler' : 'Filmler',
+2563:                 platform_name:type === 'series' ? 'Diziler' : 'Filmler',
+2569:                 episodes:[]
+2577: async function isaFlixDiscoverWebCatalog() {
+2578:     const empty = {movies:[],series:[]};
+2581:         const cached = localStorage.getItem(ISAFLIX_WEB_CACHE_KEY);
+2584:             if (parsed && Array.isArray(parsed.movies) &&
+2585:                 Array.isArray(parsed.series)) {
+2586:                 window.__ISAFLIX_WEB_CATALOG = parsed;
+2588:                     'isa:catalog-catalog-updated', {detail:parsed}
+2597:         while (cursor < ISAFLIX_WEB_SOURCES.length) {
+2598:             const source = ISAFLIX_WEB_SOURCES[cursor++];
+2600:                 const items = await isaFlixDiscoverOneSource(source);
+2603:                 console.warn('İSAFLIX kaynak taraması tamamlanamadı:', source.id);
+2624:     const catalog = {
+2625:         movies:all.filter(x => x.type === 'movie'),
+2626:         series:all.filter(x => x.type === 'series')
+2629:     if (catalog.movies.length || catalog.series.length) {
+2630:         window.__ISAFLIX_WEB_CATALOG = catalog;
+2632:             localStorage.setItem(ISAFLIX_WEB_CACHE_KEY, JSON.stringify(catalog));
+2634:     } else if (!window.__ISAFLIX_WEB_CATALOG) {
+2635:         window.__ISAFLIX_WEB_CATALOG = empty;
+2639:         'isa:catalog-catalog-updated',
+2640:         {detail:window.__ISAFLIX_WEB_CATALOG}
+2644: function isaFlixArray(value) {
+2648: function isaFlixText(value, fallback='') {
+2652: function isaFlixHeaders(item) {
+2659: function isaFlixModeItems(data, mode) {
+2660:     if (mode === 'live') return isaFlixArray(data.live_channels);
+2661:     if (mode === 'movies') return isaFlixArray(data.movies);
+2662:     return isaFlixArray(data.series);
+2665: function isaFlixCategory(item, mode) {
+2666:     if (mode === 'live') return isaFlixText(item.category_name, 'Genel');
+2667:     if (mode === 'movies') return isaFlixText(item.category_name, 'Diğer');
+2668:     return isaFlixText(item.platform_name || item.category_name, 'Diğer');
+2671: function isaFlixCategories(data, mode) {
+2673:     if (mode === 'live') source = isaFlixArray(data.live_categories);
+2674:     if (mode === 'movies') source = isaFlixArray(data.movie_categories);
+2675:     if (mode === 'series') source = isaFlixArray(data.series_platforms);
+2677:     let names = source.map(x => isaFlixText(x.name).trim()).filter(Boolean);
+2679:         names = [...new Set(isaFlixModeItems(data, mode).map(x =>
+2680:             isaFlixCategory(x, mode)
+2686: function isaFlixRoot() {
+2690: function isaFlixOpen() {
+2695: function isaFlixRender() {
+2696:     const root = isaFlixRoot();
+2699:     const data = isaFlixCatalog();
+2701:         ['movies', 'Filmler', 'fa-film'],
+2702:         ['series', 'Diziler', 'fa-clapperboard']
+2705:     const totalMovies = isaFlixArray(data.movies).length;
+2706:     const totalSeries = isaFlixArray(data.series).length;
+2712:                 ${totalMovies.toLocaleString('tr-TR')} film ·
+2713:                 ${totalSeries.toLocaleString('tr-TR')} dizi
+2719:                     class="${isaFlixState.mode===id?'active':''}">
+2726:                 placeholder="İçerik ara..." value="${esc(isaFlixState.query)}">
+2729:                 ${isaFlixCategories(data,isaFlixState.mode).map(name => `
+2731:                         ${isaFlixState.category===name?'selected':''}>
+2746:             isaFlixState.mode = button.dataset.isafMode;
+2747:             isaFlixState.category = '';
+2748:             isaFlixState.query = '';
+2749:             isaFlixState.series = null;
+2750:             isaFlixRender();
+2758:         isaFlixState.query = search.value;
+2759:         isaFlixRenderItems();
+2763:         isaFlixState.category = category.value;
+2764:         isaFlixRenderItems();
+2767:     isaFlixRenderItems();
+2770: function isaFlixRenderItems() {
+2771:     const data = isaFlixCatalog();
+2777:     const mode = isaFlixState.mode;
+2778:     const query = isaFlixState.query.trim().toLocaleLowerCase('tr');
+2779:     const category = isaFlixState.category;
+2781:     let items = isaFlixModeItems(data, mode);
+2784:         if (category && isaFlixCategory(item,mode) !== category) return false;
+2795:     isaFlixState.items = items;
+2796:     isaFlixState.shown = 0;
+2809:     more.onclick = isaFlixLoadMore;
+2810:     isaFlixLoadMore();
+2813: function isaFlixLoadMore() {
+2819:     const items = isaFlixState.items;
+2820:     const start = isaFlixState.shown;
+2821:     const end = Math.min(start + isaFlixState.batch, items.length);
+2826:         const mode = isaFlixState.mode;
+2831:             ? isaFlixCategory(item,mode)
+2832:             : [item.year, isaFlixCategory(item,mode)].filter(Boolean).join(' · ');
+2854:             icon.className = 'fas ' + (mode==='live'?'fa-tv':'fa-film');
+2859:         card.onclick = () => isaFlixOpenItem(item, i);
+2864:     isaFlixState.shown = end;
+2873: function isaFlixOpenItem(item) {
+2874:     const mode = isaFlixState.mode;
+2877:         const data = isaFlixCatalog();
+2878:         const category = isaFlixCategory(item,'live');
+2879:         const queue = isaFlixArray(data.live_channels)
+2880:             .filter(x => isaFlixCategory(x,'live') === category)
+2887:                 headers:isaFlixHeaders(x),
+2897:     if (mode === 'movies') {
+2899:         if (!/^https?:\/\//i.test(url)) {
+2900:             alert('Bu film için geçerli bağlantı bulunamadı.');
+2904:             openIsaFlixVODItem({
+2905:                 name:item.title || item.name || 'Film',
+2906:                 title:item.title || item.name || 'Film',
+2911:                 headers:isaFlixHeaders(item),
+2918:         const queue = isaFlixArray(isaFlixState.items)
+2921:                 name:cleanMediaTitle(x.title || x.name || 'Film'),
+2924:                 group:isaFlixCategory(x,'movies'),
+2925:                 headers:isaFlixHeaders(x),
+2926:                 season:0,
+2927:                 episode:0,
+2933:             x.name === cleanMediaTitle(item.title || item.name || 'Film')
+2940:             alert('Film oynatma listesine eklenemedi.');
+2944:         openIsaFlixVODItem({
+2945:             name:item.title || item.name || 'Film',
+2946:             title:item.title || item.name || 'Film',
+2951:             headers:isaFlixHeaders(item),
+2959:     isaFlixShowSeries(item);
+2962: async function isaFlixLoadWebSeries(series) {
+2963:     if (series.__webEpisodesLoaded) return;
+2964:     series.__webEpisodesLoaded = true;
+2966:     if (!isHttp(series.page_url)) return;
+2968:     const html = await nativeFetch(series.page_url);
+2970:     const base = new URL(series.page_url);
+2971:     const episodes = [];
+2981:             const title = isaFlixNormalizeTitle(
+2990:             if (!/bölüm|bolum|episode|part|s\d+e\d+|\d+x\d+|sezon|season/i.test(hint))
+2996:             const episode = {
+3002:             episode.season_number = isaFlixExplicitSeasonNumber(episode);
+3003:             episode.episode_number = isaFlixExplicitEpisodeNumber(episode);
+3005:             episodes.push(episode);
+3009:     series.episodes = episodes;
+3012: function isaFlixExplicitSeasonNumber(item) {
+3013:     const raw = item.season_number ?? item.season;
+3023:         item.season
+3029:         /\b(?:season|sezon)[\s._-]*0*(\d+)\b/i,
+3030:         /\b0*(\d+)[\s._-]*(?:season|sezon)\b/i
+3041: function isaFlixExplicitEpisodeNumber(item) {
+3042:     const raw = item.episode_number ?? item.episode ?? item.episode_num;
+3057:         /(?:bölüm|bolum|episode|ep)[\s._-]*0*(\d+)/i
+3069: function isaFlixShowSeries(series) {
+3070:     const root = isaFlixRoot();
+3073:     const episodes = isaFlixArray(series.episodes);
+3075:     if (!episodes.length && series.page_url && !series.__webEpisodesLoaded) {
+3078:         isaFlixLoadWebSeries(series)
+3079:             .then(() => isaFlixShowSeries(series))
+3081:                 series.__webEpisodesLoaded = true;
+3082:                 isaFlixShowSeries(series);
+3087:     const prepared = episodes.map((episode, index) => ({
+3088:         ...episode,
+3090:         __realSeason: isaFlixExplicitSeasonNumber(episode),
+3091:         __realEpisode: isaFlixExplicitEpisodeNumber(episode)
+3094:     const seasons = new Map();
+3096:     for (const episode of prepared) {
+3097:         const number = episode.__realSeason;
+3099:         if (!seasons.has(number)) seasons.set(number, []);
+3100:         seasons.get(number).push(episode);
+3103:     const seasonNumbers = [...seasons.keys()].sort((a, b) => a - b);
+3104:     const poster = series.poster_url || series.image_url || '';
+3107:     if (!seasonNumbers.some(number => number > 0)) {
+3108:         isaFlixShowEpisodes(series, 0, prepared);
+3118:             <h2>${esc(series.title || series.name || 'Dizi')}</h2>
+3119:             <p>${esc(series.description || '')}</p>
+3120:             <div class="isaf-season-grid">
+3121:                 ${seasonNumbers.map((number, index) => `
+3122:                     <button class="isaf-season" data-isaf-season="${index}">
+3124:                         <small>${seasons.get(number).length} bölüm</small>
+3128:             ${episodes.length ? '' : '<p class="isa-vod-note">Bu dizide bölüm bulunamadı.</p>'}
+3133:         isaFlixState.mode = 'series';
+3134:         isaFlixRender();
+3137:     root.querySelectorAll('[data-isaf-season]').forEach(button => {
+3139:             const number = seasonNumbers[Number(button.dataset.isafSeason)];
+3140:             isaFlixShowEpisodes(series, number, seasons.get(number));
+3146: function isaFlixShowEpisodes(series, number, episodes) {
+3147:     const root = isaFlixRoot();
+3150:     const sortedEpisodes = [...episodes].sort((a, b) => {
+3151:         const an = isaFlixExplicitEpisodeNumber(a);
+3152:         const bn = isaFlixExplicitEpisodeNumber(b);
+3161:     const seriesTitle = series.title || series.name || 'Dizi';
+3165:             <button class="isa-back" id="isaf-season-back">
+3169:             <h2>${esc(seriesTitle)}${number > 0 ? ' · Sezon ' + number : ''}</h2>
+3170:             <div class="isaf-season-grid">
+3171:                 ${sortedEpisodes.map((episode, index) => {
+3172:                     const realNumber = isaFlixExplicitEpisodeNumber(episode);
+3173:                     const label = episode.title || episode.name ||
+3177:                         <button class="isaf-season" data-isaf-episode="${index}">
+3187:     document.getElementById('isaf-season-back').onclick =
+3188:         () => isaFlixShowSeries(series);
+3190:     root.querySelectorAll('[data-isaf-episode]').forEach(button => {
+3192:             const episode = sortedEpisodes[Number(button.dataset.isafEpisode)];
+3193:             const url = episode.stream_url || '';
+3195:             const seasonNumber =
+3196:                 isaFlixExplicitSeasonNumber(episode) ||
+3199:             const episodeNumber = isaFlixExplicitEpisodeNumber(episode);
+3201:             if (!/^https?:\/\//i.test(url) && isHttp(episode.page_url)) {
+3207:                 resolveStaticMedia(episode.page_url)
+3208:                     .then(resolved => {
+3210:                         if (!resolved) throw new Error('Video bulunamadı.');
+3212:                         const showName = cleanMediaTitle(seriesTitle);
+3215:                             url: resolved,
+3216:                             headers: {Referer: episode.page_url},
+3217:                             season: seasonNumber,
+3218:                             episode: episodeNumber,
+3220:                             is_series: true,
+3221:                             series_id: series.id || series.series_id || series.page_url,
+3222:                             series_name: showName,
+3223:                             series_url: series.page_url || ''
+3226:                         playIsaFlix(showName, resolved, entry.headers, [entry], 0);
+3236:             if (!/^https?:\/\//i.test(url)) {
+3241:             const allEpisodes = isaFlixArray(series.episodes)
+3244:                     __season: isaFlixExplicitSeasonNumber(ep),
+3245:                     __episode: isaFlixExplicitEpisodeNumber(ep)
+3249:                     a.__season - b.__season ||
+3250:                     a.__episode - b.__episode
+3253:             const showName = cleanMediaTitle(seriesTitle);
+3255:             const queue = allEpisodes.map(ep => ({
+3258:                 logo: ep.image_url || series.poster_url || series.image_url || '',
+3259:                 group: series.platform_name || 'Diziler',
+3260:                 headers: isaFlixHeaders(ep),
+3261:                 season: ep.__season,
+3262:                 episode: ep.__episode,
+3268:                 x.season === seasonNumber &&
+3269:                 x.episode === episodeNumber
+3279:             playIsaFlix(
+3282:                 isaFlixHeaders(episode),
+3290: window.addEventListener('isa:catalog-catalog-updated', event => {
+3293:     if (isaFlixRoot()) isaFlixRender();
+3297: function isaFlixInit() {
+3305:     const data = isaFlixCatalog();
+3308:         isaFlixRender();
+3313:     const films = document.getElementById('isa-films-panel');
+3314:     const series = document.getElementById('isa-series-panel');
+3316:     if ((films && films.classList.contains('active')) ||
+3317:         (series && series.classList.contains('active'))) {
+3328:     isaFlixInit();
+3334:     isaFlixDiscoverWebCatalog();
+
+======================================================================
+DOSYA: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/player.js
+SATIR SAYISI: 551
+1: class NetflixIPTVPlayer {
+21:         this.videoPlayer = document.getElementById('video-player');
+50:         this.videoPlayer.volume = this.volumeSlider.value / 100;
+51:         this.lastVolume = this.videoPlayer.volume;
+55:         // Video player events
+56:         this.videoPlayer.addEventListener('play', () => this.onPlay());
+57:         this.videoPlayer.addEventListener('pause', () => this.onPause());
+58:         this.videoPlayer.addEventListener('error', (e) => this.onError(e));
+59:         this.videoPlayer.addEventListener('loadstart', () => this.onLoadStart());
+60:         this.videoPlayer.addEventListener('canplay', () => this.onCanPlay());
+61:         this.videoPlayer.addEventListener('timeupdate', () => this.updateProgress());
+167:         const resolution = this.extractResolution(name);
+184:     extractResolution(name) {
+311:         // Stop current playback
+312:         this.videoPlayer.pause();
+315:         this.videoPlayer.src = url;
+316:         this.videoPlayer.load();
+320:             this.videoPlayer.play().catch(error => {
+330:         this.playPauseBtn.title = 'Click to start playback';
+334:         if (this.videoPlayer.paused) {
+335:             this.videoPlayer.play();
+337:             this.videoPlayer.pause();
+355:         this.videoPlayer.volume = volume;
+370:             this.videoPlayer.volume = this.lastVolume;
+375:             this.videoPlayer.volume = 0;
+383:         if (this.videoPlayer.duration) {
+384:             const percent = (this.videoPlayer.currentTime / this.videoPlayer.duration) * 100;
+548:     console.log('🎬 StreamFlix Player Initializing...');
+549:     window.netflixPlayer = new NetflixIPTVPlayer();
+550:     console.log('✅ StreamFlix Player Ready!');
+
+======================================================================
+DOSYA: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/tr-translation.js
+SATIR SAYISI: 210
+77:   "Playback Error": "Oynatma Hatası",
+83:   "Video Player": "Video Oynatıcı",
+119:   "VOD": "Film ve Diziler",
+120:   "Movies": "Filmler",
+121:   "Series": "Diziler",
+
+======================================================================
+DOSYA: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/player.html
+SATIR SAYISI: 237
+8:     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+9:     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+20: <body class="video-player-page">
+22:     <nav class="player-navbar">
+36:     <!-- Fullscreen Video Player -->
+37:     <div class="player-container">
+40:             <video id="video-player" playsinline>
+65:             <!-- Player Controls Overlay -->
+66:             <div class="player-controls-overlay">
+110:     <aside class="sidebar player-sidebar" id="sidebar">
+114:                 <div class="playlist-toggle player-playlist-toggle">
+188:                 <div class="channel-list" id="player-channel-list">
+223:     <script src="js/isa-player-source.js"></script>
+235: <script src="js/isa-player-source.js"></script>
+
+======================================================================
+DOSYA: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/sw.js
+SATIR SAYISI: 148
+4:   './player.html',
+7:   './js/netflix-player.js',
+
+======================================================================
+DOSYA: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java
+SATIR SAYISI: 905
+1: package com.isatvhd.player;
+19: import android.webkit.WebView;
+20: import android.webkit.WebViewClient;
+27: import androidx.media3.common.C;
+28: import androidx.media3.common.MediaItem;
+29: import androidx.media3.common.PlaybackException;
+30: import androidx.media3.common.Player;
+31: import androidx.media3.datasource.DefaultHttpDataSource;
+32: import androidx.media3.exoplayer.ExoPlayer;
+33: import androidx.media3.exoplayer.hls.HlsMediaSource;
+34: import androidx.media3.exoplayer.dash.DashMediaSource;
+35: import androidx.media3.exoplayer.source.MediaSource;
+36: import androidx.media3.exoplayer.source.ConcatenatingMediaSource;
+37: import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+38: import androidx.media3.ui.PlayerView;
+48: public class IsaflixPlayerActivity extends Activity {
+50:     private ExoPlayer player;
+51:     private PlayerView playerView;
+54:     private TextView episodeView;
+58:     private WebView webView;
+60:     private boolean websitePlaybackMode = false;
+66:     private final Runnable hideEpisodeInfo = () -> {
+67:         if (episodeView != null
+70:             episodeView.animate().alpha(0f).setDuration(250)
+71:                     .withEndAction(() -> episodeView.setVisibility(View.GONE))
+98:             initializePlayer();
+100:             startWebsitePlayback(url);
+133:                 android.util.Log.e("ISAFLIX", "Kuyruk okunamadı", e);
+157:         playerView = new PlayerView(this);
+158:         playerView.setUseController(true);
+159:         playerView.setControllerAutoShow(true);
+160:         playerView.setControllerHideOnTouch(true);
+161:         playerView.setControllerShowTimeoutMs(3000);
+162:         playerView.setShowBuffering(
+163:                 PlayerView.SHOW_BUFFERING_WHEN_PLAYING
+166:         root.addView(playerView, new FrameLayout.LayoutParams(
+227:         episodeView = new TextView(this);
+228:         episodeView.setTextColor(0xFFE5E5E5);
+229:         episodeView.setTextSize(13);
+231:         FrameLayout.LayoutParams episodeParams =
+237:         episodeParams.topMargin = dp(48);
+238:         info.addView(episodeView, episodeParams);
+264:         favoriteButton.setContentDescription("İSAFLIX favorilere ekle");
+299:     private void startWebsitePlayback(String pageUrl) {
+300:         websitePlaybackMode = true;
+309:         playerView.setVisibility(View.GONE);
+313:         webView = new WebView(this);
+314:         WebSettings settings = webView.getSettings();
+318:         settings.setMediaPlaybackRequiresUserGesture(true);
+327:         cookies.setAcceptThirdPartyCookies(webView, true);
+329:         webView.addJavascriptInterface(new WebsiteBridge(), "ISAWebsiteBridge");
+340:         webView.setWebChromeClient(new WebChromeClient() {
+343:                     WebView view, boolean dialog, boolean userGesture,
+345:                 // Popup pencereleri ana WebView dışında açılmaz.
+350:         webView.setWebViewClient(new WebViewClient() {
+353:                     WebView view, String url) {
+370:             public void onPageFinished(WebView view, String url) {
+379:         root.addView(webView, 0, params);
+380:         webView.loadUrl(pageUrl);
+384:         if (webView == null) return;
+430:         webView.evaluateJavascript(script, null);
+441:         if (websiteMediaAccepted || !websitePlaybackMode) return;
+444:             // DRM içeriği sitenin kendi WebView oynatıcısında kalır.
+445:             android.util.Log.i("ISAFLIX", "DRM algılandı; WebView oynatması korunuyor.");
+466:             if (webView != null) {
+467:                 webView.stopLoading();
+468:                 root.removeView(webView);
+469:                 webView.destroy();
+470:                 webView = null;
+473:             websitePlaybackMode = false;
+474:             playerView.setVisibility(View.VISIBLE);
+476:             initializePlayer();
+479:             android.util.Log.e("ISAFLIX", "Medya aktarımı başarısız", e);
+553:     private void initializePlayer() {
+568:             player = new ExoPlayer.Builder(this).build();
+569:             playerView.setPlayer(player);
+571:             player.addListener(new Player.Listener() {
+573:                 public void onPlaybackStateChanged(int state) {
+574:                     if (state == Player.STATE_READY) {
+577:                         playerView.showController();
+578:                     } else if (state == Player.STATE_BUFFERING) {
+581:                     } else if (state == Player.STATE_ENDED) {
+595:                 public void onPlayerError(PlaybackException error) {
+600:                             "ISAFLIX", "Oynatma hatası", error
+609:             player.setMediaSource(playlist);
+610:             player.seekTo(index, 0L);
+611:             player.prepare();
+612:             player.play();
+617:             android.util.Log.e("ISAFLIX", "Oynatıcı başlatılamadı", e);
+626:         if (player == null || queue.isEmpty()) return;
+628:         int index = player.getCurrentMediaItemIndex();
+637:         titleView.setText(name == null ? "İSAFLIX" : name);
+639:         int season = item.optInt("season", 0);
+640:         int episode = item.optInt("episode", 0);
+642:         infoHandler.removeCallbacks(hideEpisodeInfo);
+644:         if (season > 0 || episode > 0) {
+645:             episodeView.animate().cancel();
+646:             episodeView.setAlpha(1f);
+648:             String episodeInfo;
+649:             if (season > 0 && episode > 0) {
+650:                 episodeInfo = "Sezon " + season + "  ·  " + episode + ". Bölüm";
+651:             } else if (season > 0) {
+652:                 episodeInfo = "Sezon " + season;
+654:                 episodeInfo = episode + ". Bölüm";
+657:             episodeView.setText(episodeInfo);
+663:             episodeView.setVisibility(View.VISIBLE);
+666:                 infoHandler.postDelayed(hideEpisodeInfo, 5000L);
+669:             episodeView.setVisibility(View.GONE);
+674:         boolean series = item.optBoolean("is_series", false)
+675:                 || "series".equalsIgnoreCase(item.optString("type", ""))
+676:                 || item.optInt("season", 0) > 0;
+678:         String parentId = item.optString("series_id",
+680:         if (series) {
+681:             String parentName = item.optString("series_name",
+682:                     item.optString("name", "İSAFLIX dizisi"));
+683:             return "series:" + (parentId.isEmpty() ? parentName : parentId);
+687:         return "movie:" + (id.isEmpty()
+694:         int index = player == null ? 0 : player.getCurrentMediaItemIndex();
+705:                     prefs.getString("isaflix_favorites", "[]"));
+715:             android.util.Log.e("ISAFLIX", "Favoriler okunamadı", e);
+727:         int index = player == null ? 0 : player.getCurrentMediaItemIndex();
+732:         boolean series = favoriteId.startsWith("series:");
+739:                     prefs.getString("isaflix_favorites", "[]"));
+757:                 record.put("name", series
+758:                         ? item.optString("series_name",
+759:                             item.optString("name", "İSAFLIX dizisi"))
+760:                         : item.optString("name", "İSAFLIX filmi"));
+761:                 record.put("url", series
+762:                         ? item.optString("series_url",
+767:                 record.put("type", series ? "series" : "movie");
+768:                 record.put("is_series", series);
+769:                 if (series) {
+770:                     record.put("series_id",
+771:                             item.optString("series_id",
+777:             prefs.edit().putString("isaflix_favorites",
+782:             android.util.Log.e("ISAFLIX", "Favori kaydedilemedi", e);
+821:             android.util.Log.e("ISAFLIX", "Logo yüklenemedi", e);
+829:                 && player != null) {
+836:                 if (player.hasNextMediaItem()) {
+837:                     player.seekToNextMediaItem();
+845:                 if (player.hasPreviousMediaItem()) {
+846:                     player.seekToPreviousMediaItem();
+885:         if (player != null) player.pause();
+886:         if (webView != null) webView.onPause();
+893:         if (playerView != null) playerView.setPlayer(null);
+894:         if (player != null) {
+895:             player.release();
+896:             player = null;
+898:         if (webView != null) {
+899:             webView.stopLoading();
+900:             webView.destroy();
+901:             webView = null;
+
+======================================================================
+DOSYA: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/MainActivity.java
+SATIR SAYISI: 1124
+1: package com.isatvhd.player;
+15: import android.webkit.WebView;
+16: import android.webkit.WebViewClient;
+40:     private WebView webView;
+58:         webView = new WebView(this);
+59:         webView.setBackgroundColor(Color.rgb(12, 12, 12));
+61:         WebSettings settings = webView.getSettings();
+68:         settings.setMediaPlaybackRequiresUserGesture(false);
+75:         webView.addJavascriptInterface(new ISATVBridge(), "ISATV");
+77:         webView.setWebViewClient(new WebViewClient() {
+79:             public void onPageFinished(WebView view, String url) {
+93:         webView.setWebChromeClient(new WebChromeClient() {
+96:                     WebView view,
+120:         root.addView(webView, new FrameLayout.LayoutParams(
+129:         webView.loadUrl(
+207:                         PlayerActivity.class
+223:             "isa-player-queue.json"
+247:         // ISAFLIX_QUEUE_V2
+249:         public void playIsaflix(
+271:                         one.put("name", name == null ? "İSAFLIX" : name);
+283:                             "isaflix-player-queue.json"
+296:                             IsaflixPlayerActivity.class
+301:                             name == null ? "İSAFLIX" : name
+312:                     Log.e(TAG, "İSAFLIX kuyruğu aktarılamadı", e);
+315:                             "İSAFLIX oynatma listesi hazırlanamadı",
+358:         private void reportCatalogProgress(
+366:                 if (webView == null) return;
+367:                 webView.evaluateJavascript(
+368:                     "if(window.__isaCatalogProgress)window.__isaCatalogProgress(" +
+377:         public String readCatalogChunk(String offsetText, int requestedBytes) {
+382:                     getCacheDir(), "isaflix-web-katalog.json"
+411:                 Log.e(TAG, "Catalog parça okuma hatası", e);
+418:         public void loadCachedCatalogCatalog(String callbackId) {
+423:                 getCacheDir(), "isaflix-web-katalog.json"
+432:                 if (webView == null) return;
+435:                     webView.evaluateJavascript(
+436:                         "window.__isaCatalogReady(" +
+442:                     webView.evaluateJavascript(
+443:                         "window.__isaCatalogDone(" +
+453:         public void fetchCatalogCatalog(String callbackId) {
+462:                         getCacheDir(), "isaflix-web-katalog.json"
+466:                         getSharedPreferences("isaflix_web_catalog", MODE_PRIVATE);
+472:                         "https://raw.githubusercontent.com/thechampisher/ISA-TV-HD/main/INCELEME/isaflix-web-katalog.json"
+495:                             getCacheDir(), "catalog-catalog.download"
+503:                         reportCatalogProgress(callbackId, "download", 0);
+525:                                     reportCatalogProgress(
+536:                         reportCatalogProgress(callbackId, "load", 70);
+538:                         decryptCatalogFile(encrypted, cache, callbackId);
+550:                         throw new java.io.IOException("Catalog HTTP " + status);
+555:                         ? "Catalog kataloğu alınamadı." : ex.getMessage();
+557:                     Log.e(TAG, "Catalog katalog hatası", ex);
+567:                 final java.io.File catalogFile = new java.io.File(
+568:                     getCacheDir(), "isaflix-web-katalog.json"
+571:                 final long catalogSize =
+572:                     failure == null && catalogFile.isFile()
+573:                     ? catalogFile.length() : 0L;
+576:                     if (webView == null) return;
+578:                     webView.evaluateJavascript(
+579:                         "window.__isaCatalogReady(" + id + "," +
+580:                         catalogSize + "," +
+608:         private void decryptCatalogFile(
+680:                                     reportCatalogProgress(
+734:                 reportCatalogProgress(callbackId, "load", 90);
+833:             if (webView == null) return;
+840:             webView.evaluateJavascript(js, null);
+906:                     if (webView == null) return;
+910:                     webView.evaluateJavascript(callback, null);
+917:             if (address == null || !(address.startsWith("https://") || address.startsWith("http://"))) return;
+1016:                 if (webView == null) return;
+1026:                 webView.evaluateJavascript(
+1061:         if (webView != null) {
+1062:             webView.postDelayed(() -> {
+1063:                 if (webView != null) {
+1064:                     webView.evaluateJavascript(
+1076:         if (webView == null) {
+1081:         webView.evaluateJavascript(
+1117:         if (webView != null) {
+1118:             webView.destroy();
+1119:             webView = null;
+
+======================================================================
+DOSYA: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/PlayerActivity.java
+SATIR SAYISI: 1601
+1: package com.isatvhd.player;
+27: import androidx.media3.common.MediaItem;
+28: import androidx.media3.exoplayer.hls.HlsMediaSource;
+29: import androidx.media3.exoplayer.DefaultLoadControl;
+30: import androidx.media3.common.PlaybackException;
+31: import androidx.media3.common.Player;
+32: import androidx.media3.datasource.DefaultHttpDataSource;
+33: import androidx.media3.exoplayer.ExoPlayer;
+34: import androidx.media3.ui.PlayerView;
+44: public class PlayerActivity extends Activity {
+46:     private static final String TAG = "ISATVPlayer";
+48:     private ExoPlayer player;
+50:     private final Map<Integer, ExoPlayer> preloadedPlayers =
+53:     private final ArrayList<ExoPlayer> standbyPlayers =
+55:     private PlayerView playerView;
+60:     private TextView portraitEpisodeInfo;
+99:         int season;
+100:         int episode;
+162:                 channel.season = object.optInt("season", 0);
+163:                 channel.episode = object.optInt("episode", 0);
+226:         initializePlayer();
+282:         playerView = new PlayerView(this);
+283:         playerView.setUseController(false);
+285:         root.addView(playerView, new FrameLayout.LayoutParams(
+291:         // Media3 oynatma kontrolleri devre dışıdır.
+292:         View channelTapLayer = new View(this);
+293:         channelTapLayer.setBackgroundColor(Color.TRANSPARENT);
+294:         channelTapLayer.setOnTouchListener(new View.OnTouchListener() {
+325:                             float width = Math.max(1, playerView.getWidth());
+327:                             playerView.setTranslationX(offset);
+332:                             float height = Math.max(playerView.getHeight(), getResources().getDisplayMetrics().heightPixels);
+334:                             playerView.setTranslationY(offset);
+350:                                 float threshold = Math.max(dp(70), playerView.getWidth() * 0.18f);
+354:                                 float threshold = Math.max(dp(90), playerView.getHeight() * 0.22f);
+379:         root.addView(channelTapLayer, new FrameLayout.LayoutParams(
+471:                 View videoContent = playerView.getChildAt(0);
+520:         portraitEpisodeInfo = new TextView(this);
+521:         portraitEpisodeInfo.setTextColor(0xFFE0E0E0);
+522:         portraitEpisodeInfo.setTextSize(12);
+523:         portraitEpisodeInfo.setPadding(dp(2), dp(2), dp(2), 0);
+524:         portraitEpisodeInfo.setVisibility(View.GONE);
+525:         portraitPanel.addView(portraitEpisodeInfo);
+592:     private void initializePlayer() {
+593:         player = createManagedPlayer(false);
+594:         playerView.setPlayer(player);
+598:     private ExoPlayer createManagedPlayer(boolean preload) {
+610:         ExoPlayer p = new ExoPlayer.Builder(this)
+631:             if (p != player || p.isReleased()) return;
+646:         p.addListener(new Player.Listener() {
+648:             public void onPlaybackStateChanged(int state) {
+649:                 if (p != player) return;
+651:                 if (state == Player.STATE_READY) {
+657:                 } else if (state == Player.STATE_BUFFERING) {
+660:                 } else if (state == Player.STATE_IDLE) {
+663:                 } else if (state == Player.STATE_ENDED) {
+680:             public void onPlayerError(PlaybackException error) {
+684:                 if (p == player) {
+703:     private void prepareChannel(ExoPlayer target, int index,
+736:                                 .setMinPlaybackSpeed(0.97f)
+737:                                 .setMaxPlaybackSpeed(1.03f)
+758:             androidx.media3.exoplayer.source.MediaSource mediaSource;
+766:                         new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(
+782:     private ExoPlayer obtainStandbyPlayer() {
+783:         if (!standbyPlayers.isEmpty()) {
+784:             return standbyPlayers.remove(standbyPlayers.size() - 1);
+787:         return createManagedPlayer(true);
+790:     private void recyclePlayer(ExoPlayer p) {
+791:         if (p == null || p == player) return;
+798:         if (!standbyPlayers.contains(p) && standbyPlayers.size() < 2) {
+799:             standbyPlayers.add(p);
+800:         } else if (!standbyPlayers.contains(p)) {
+806:         if (channels.size() < 2 || player == null) return;
+818:         java.util.Iterator<Map.Entry<Integer, ExoPlayer>> iterator =
+819:                 preloadedPlayers.entrySet().iterator();
+822:             Map.Entry<Integer, ExoPlayer> entry = iterator.next();
+825:                 ExoPlayer old = entry.getValue();
+827:                 recyclePlayer(old);
+832:             if (!preloadedPlayers.containsKey(index)) {
+833:                 ExoPlayer standby = obtainStandbyPlayer();
+835:                 preloadedPlayers.put(index, standby);
+843:         if (playerView == null) return;
+845:         playerView.animate().cancel();
+846:         playerView.animate()
+847:                 .translationX(horizontal ? 0f : playerView.getTranslationX())
+848:                 .translationY(horizontal ? playerView.getTranslationY() : 0f)
+868:                 playerView == null) return;
+872:         final int distance = horizontal ? Math.max(1, playerView.getWidth()) : Math.max(
+873:                 playerView.getHeight(), getResources().getDisplayMetrics().heightPixels);
+877:         playerView.animate().cancel();
+883:         playerView.animate()
+895:                     playerView.setTranslationX(horizontal ? enter : 0f);
+896:                     playerView.setTranslationY(horizontal ? 0f : enter);
+903:                     playerView.animate()
+933:         if (player == null || selectedIndex < 0 ||
+948:         ExoPlayer oldActive = player;
+949:         ExoPlayer readyPlayer = preloadedPlayers.remove(selectedIndex);
+952:             if (readyPlayer != null) {
+954:                 player = readyPlayer;
+955:                 playerView.setPlayer(player);
+957:                 player.setVolume(1f);
+958:                 player.setTrackSelectionParameters(
+959:                         player.getTrackSelectionParameters()
+965:                 player.setPlayWhenReady(true);
+967:                 recyclePlayer(oldActive);
+971:                 prepareChannel(player, selectedIndex, false);
+978:             int activeState = player.getPlaybackState();
+980:             if (activeState == Player.STATE_READY) {
+982:             } else if (activeState == Player.STATE_BUFFERING ||
+983:                        activeState == Player.STATE_IDLE) {
+1033:     Iterator<Map.Entry<Integer, ExoPlayer>> iterator =
+1034:             preloadedPlayers.entrySet().iterator();
+1037:         ExoPlayer standby = iterator.next().getValue();
+1039:         recyclePlayer(standby);
+1054:         if (player != null && channels.size() >= 2) {
+1098:     if (portraitEpisodeInfo != null) portraitEpisodeInfo.setVisibility(portrait ? View.VISIBLE : View.GONE);
+1107:         if (portraitEpisodeInfo != null) {
+1108:             if (channel.season > 0 || channel.episode > 0) {
+1109:                 String label = (channel.season > 0 ? "Sezon " + channel.season : "") +
+1110:                         (channel.episode > 0 ? "  ·  " + channel.episode + ". Bölüm" : "");
+1111:                 portraitEpisodeInfo.setText(label.trim());
+1112:                 portraitEpisodeInfo.setVisibility(View.VISIBLE);
+1113:             } else portraitEpisodeInfo.setVisibility(View.GONE);
+1137:         item.put("season", channel.season);
+1138:         item.put("episode", channel.episode);
+1309:                 row = new LinearLayout(PlayerActivity.this);
+1315:                 icon = new ImageView(PlayerActivity.this);
+1321:                 texts = new LinearLayout(PlayerActivity.this);
+1325:                 name = new TextView(PlayerActivity.this);
+1331:                 subtitle = new TextView(PlayerActivity.this);
+1511:         // Mevcut ExoPlayer ve video yüzeyini değiştirme.
+1560:         if (player != null) player.pause();
+1567:         if (player != null) {
+1576:         if (playerView != null) {
+1577:             playerView.setPlayer(null);
+1580:         java.util.HashSet<ExoPlayer> allPlayers =
+1583:         if (player != null) allPlayers.add(player);
+1584:         allPlayers.addAll(preloadedPlayers.values());
+1585:         allPlayers.addAll(standbyPlayers);
+1587:         preloadedPlayers.clear();
+1588:         standbyPlayers.clear();
+1590:         for (ExoPlayer p : allPlayers) {
+1596:         player = null;
+
+======================================================================
+DOSYA: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/SplashActivity.java
+SATIR SAYISI: 70
+1: package com.isatvhd.player;
+
+======================================================================
+DOSYA: review-upload/extracted-source/app/src/main/res/drawable/ic_launcher_background.xml
+SATIR SAYISI: 5
+2: <shape xmlns:android="http://schemas.android.com/apk/res/android"
+
+======================================================================
+DOSYA: review-upload/extracted-source/app/src/main/res/drawable/ic_launcher_foreground.xml
+SATIR SAYISI: 4
+2: <bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+
+======================================================================
+DOSYA: review-upload/extracted-source/app/src/main/res/layout/isa_player_view.xml
+SATIR SAYISI: 9
+2: <androidx.media3.ui.PlayerView
+3:     xmlns:android="http://schemas.android.com/apk/res/android"
+4:     xmlns:app="http://schemas.android.com/apk/res-auto"
+5:     android:id="@+id/isa_media_player"
+
+======================================================================
+DOSYA: review-upload/extracted-source/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+SATIR SAYISI: 5
+2: <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+
+======================================================================
+DOSYA: review-upload/extracted-source/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+SATIR SAYISI: 5
+2: <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+
+======================================================================
+DOSYA: review-upload/isaflix-build-20261102-015047.txt
+SATIR SAYISI: 14
+1: ISAFLIX DERLEME RAPORU
+
+======================================================================
+DOSYA: review-upload/isaflix-integration-20261102-013301.txt
+SATIR SAYISI: 106
+1: ISAFLIX ANA PROJE ENTEGRASYON RAPORU
+9: app/src/main/java/com/isatvhd/player/MainActivity.java
+10: app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java
+16: To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.6.0/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+36: > Task :app:extractDeepLinksDebug
+69: For more details on how to configure these settings, see https://developer.android.com/build/jdks.
+94: For more on this, please refer to https://docs.gradle.org/9.6.0/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+98: Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.6.0/userguide/configuration_cache_enabling.html
+
+======================================================================
+DOSYA: review-upload/source-diff-20261102-013115.txt
+SATIR SAYISI: 2275
+3: app/src/main/AndroidManifest.xml <=> review-upload/extracted-source/app/src/main/AndroidManifest.xml
+6: +++ review-upload/extracted-source/app/src/main/AndroidManifest.xml
+9:              android:name=".PlayerActivity"
+13: +            android:name=".IsaflixPlayerActivity"
+20: app/build.gradle <=> review-upload/extracted-source/app/build.gradle
+23: +++ review-upload/extracted-source/app/build.gradle
+26:      implementation 'androidx.media3:media3-exoplayer:1.4.1'
+27:      implementation 'androidx.media3:media3-exoplayer-hls:1.4.1'
+28: +    implementation 'androidx.media3:media3-exoplayer-dash:1.4.1'
+29:      implementation 'androidx.media3:media3-ui:1.4.1'
+34: app/src/main/java/com/isatvhd/player/MainActivity.java <=> review-upload/extracted-source/app/src/main/java/com/isatvhd/player/MainActivity.java
+36: --- app/src/main/java/com/isatvhd/player/MainActivity.java
+37: +++ review-upload/extracted-source/app/src/main/java/com/isatvhd/player/MainActivity.java
+42: +        // ISAFLIX_QUEUE_V2
+44: +        public void playIsaflix(
+66: +                        one.put("name", name == null ? "İSAFLIX" : name);
+78: +                            "isaflix-player-queue.json"
+91: +                            IsaflixPlayerActivity.class
+96: +                            name == null ? "İSAFLIX" : name
+107: +                    Log.e(TAG, "İSAFLIX kuyruğu aktarılamadı", e);
+110: +                            "İSAFLIX oynatma listesi hazırlanamadı",
+128: +        private void reportCatalogProgress(
+136: +                if (webView == null) return;
+137: +                webView.evaluateJavascript(
+138: +                    "if(window.__isaCatalogProgress)window.__isaCatalogProgress(" +
+147: +        public String readCatalogChunk(String offsetText, int requestedBytes) {
+152: +                    getCacheDir(), "isaflix-web-katalog.json"
+181: +                Log.e(TAG, "Catalog parça okuma hatası", e);
+188: +        public void loadCachedCatalogCatalog(String callbackId) {
+193: +                getCacheDir(), "isaflix-web-katalog.json"
+202: +                if (webView == null) return;
+205: +                    webView.evaluateJavascript(
+206: +                        "window.__isaCatalogReady(" +
+212: +                    webView.evaluateJavascript(
+213: +                        "window.__isaCatalogDone(" +
+223: +        public void fetchCatalogCatalog(String callbackId) {
+232: +                        getCacheDir(), "isaflix-web-katalog.json"
+236: +                        getSharedPreferences("isaflix_web_catalog", MODE_PRIVATE);
+242: +                        "https://raw.githubusercontent.com/thechampisher/ISA-TV-HD/main/INCELEME/isaflix-web-katalog.json"
+265: +                            getCacheDir(), "catalog-catalog.download"
+273: +                        reportCatalogProgress(callbackId, "download", 0);
+295: +                                    reportCatalogProgress(
+306: +                        reportCatalogProgress(callbackId, "load", 70);
+308: +                        decryptCatalogFile(encrypted, cache, callbackId);
+320: +                        throw new java.io.IOException("Catalog HTTP " + status);
+325: +                        ? "Catalog kataloğu alınamadı." : ex.getMessage();
+327: +                    Log.e(TAG, "Catalog katalog hatası", ex);
+337: +                final java.io.File catalogFile = new java.io.File(
+338: +                    getCacheDir(), "isaflix-web-katalog.json"
+341: +                final long catalogSize =
+342: +                    failure == null && catalogFile.isFile()
+343: +                    ? catalogFile.length() : 0L;
+346: +                    if (webView == null) return;
+348: +                    webView.evaluateJavascript(
+349: +                        "window.__isaCatalogReady(" + id + "," +
+350: +                        catalogSize + "," +
+378: +        private void decryptCatalogFile(
+450: +                                    reportCatalogProgress(
+504: +                reportCatalogProgress(callbackId, "load", 90);
+534: app/src/main/java/com/isatvhd/player/PlayerActivity.java <=> review-upload/extracted-source/app/src/main/java/com/isatvhd/player/PlayerActivity.java
+540: app/src/main/assets/isa-tv-hd/js/isa-sources.js <=> review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js
+543: +++ review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js
+546:      else cb.resolve(value);
+550: +let catalogRequestId = 0;
+551: +let catalogTimerStarted = false;
+552: +let catalogLastData = null;
+553: +let catalogHasCache = false;
+554: +let catalogLoading = false;
+555: +let catalogInFlight = null;
+557: +window.__isaCatalogCallbacks = {};
+561: +function isaCatalogProgressElement() {
+563: +        'isa-catalog-progress-overlay'
+568: +        element.id = 'isa-catalog-progress-overlay';
+575: +            '<div id="isa-catalog-fill" style="' +
+578: +            '<div id="isa-catalog-percent" style="' +
+590: +function isaCatalogHideProgress() {
+592: +        'isa-catalog-progress-overlay'
+598: +window.__isaCatalogProgress = function(id, stage, percent) {
+599: +    if (catalogHasCache) return;
+601: +    const root = isaCatalogProgressElement();
+606: +    root.querySelector('#isa-catalog-fill').style.width =
+609: +    root.querySelector('#isa-catalog-percent').textContent =
+613: +window.__isaCatalogDone = function(id, value, error) {
+614: +    const callback = window.__isaCatalogCallbacks[id];
+617: +    delete window.__isaCatalogCallbacks[id];
+620: +        isaCatalogHideProgress();
+623: +        callback.resolve(value);
+627: +window.__isaCatalogReady = function(id, totalBytes, error, notModified) {
+629: +        window.__isaCatalogDone(id, null, error);
+633: +    const callback = window.__isaCatalogCallbacks[id];
+637: +    if (notModified && catalogLastData &&
+638: +        typeof catalogLastData === 'object') {
+639: +        window.__isaCatalogDone(id, catalogLastData, null);
+644: +        typeof window.ISATV.readCatalogChunk !== 'function') {
+645: +        window.__isaCatalogDone(
+646: +            id, null, 'Java Catalog parça bağlantısı bulunamadı.'
+652: +        window.__isaCatalogDone(
+653: +            id, null, 'Catalog kataloğu boş.'
+665: +            const encoded = window.ISATV.readCatalogChunk(
+670: +                throw new Error('Catalog veri parçası boş geldi.');
+692: +            window.__isaCatalogProgress(id, 'load', percent);
+701: +            window.__isaCatalogDone(
+708: +            window.__isaCatalogDone(
+710: +                'Catalog aktarım hatası: ' + e.message
+719: +function loadCachedCatalogCatalog() {
+721: +        typeof window.ISATV.loadCachedCatalogCatalog !== 'function') {
+722: +        return Promise.resolve(null);
+725: +    catalogHasCache = true;
+727: +    return new Promise(resolve => {
+728: +        const id = ++catalogRequestId;
+730: +        window.__isaCatalogCallbacks[id] = {
+731: +            resolve: value => {
+741: +                    catalogLastData = parsed;
+742: +                    window.ISA_Catalog_CATALOG = parsed;
+743: +                    catalogHasCache = true;
+744: +                    resolve(parsed);
+747: +                    catalogHasCache = false;
+748: +                    resolve(null);
+753: +                catalogHasCache = false;
+754: +                resolve(null);
+759: +            window.ISATV.loadCachedCatalogCatalog(String(id));
+761: +            delete window.__isaCatalogCallbacks[id];
+762: +            catalogHasCache = false;
+763: +            resolve(null);
+768: +function fetchCatalogCatalog() {
+769: +    if (catalogInFlight) return catalogInFlight;
+771: +    if (!window.ISATV || !window.ISATV.fetchCatalogCatalog) {
+773: +            new Error('Catalog native bağlantısı kullanılamıyor.')
+777: +    catalogLoading = true;
+779: +    catalogInFlight = new Promise((resolve, reject) => {
+780: +        const id = ++catalogRequestId;
+782: +        window.__isaCatalogCallbacks[id] = {
+783: +            resolve: value => {
+788: +                        throw new Error('Boş veya geçersiz katalog.');
+790: +                    catalogLastData = parsed;
+791: +                    window.__isaCatalogProgress(id, "parse", 100);
+792: +                    setTimeout(isaCatalogHideProgress, 180);
+793: +                    catalogHasCache = true;
+794: +                    resolve(parsed);
+796: +                    reject(new Error('Catalog JSON doğrulaması başarısız: ' + e.message));
+798: +                    catalogLoading = false;
+799: +                    catalogInFlight = null;
+803: +                catalogLoading = false;
+804: +                catalogInFlight = null;
+810: +            window.ISATV.fetchCatalogCatalog(String(id));
+812: +            delete window.__isaCatalogCallbacks[id];
+813: +            catalogLoading = false;
+814: +            catalogInFlight = null;
+819: +    return catalogInFlight;
+822: +async function refreshCatalogCatalog(silent=false) {
+824: +        const previousData = catalogLastData;
+825: +        const data = await fetchCatalogCatalog();
+829: +        window.ISA_Catalog_CATALOG = data;
+831: +            'isa:catalog-catalog-updated',
+837: +            if (status) status.textContent = 'Catalog kataloğu güncellendi.';
+842: +        console.error('Catalog katalog güncellemesi:', error);
+847: +                'Catalog güncellenemedi: ' + error.message;
+850: +        return catalogLastData;
+855: +function startCatalogAutoUpdate() {
+856: +    if (catalogTimerStarted) return;
+857: +    catalogTimerStarted = true;
+859: +    loadCachedCatalogCatalog().then(cached => {
+862: +                'isa:catalog-catalog-updated',
+867: +        refreshCatalogCatalog(true);
+872: +            refreshCatalogCatalog(true);
+984:      location.href = './player.html?'+query.toString();
+988: +/* ISAFLIX_QUEUE_V2 */
+989: +function playIsaFlix(name, url, headers={}, queue=[], index=0) {
+998: +            name:name || 'İSAFLIX',
+1001: +            season:0,
+1002: +            episode:0,
+1013: +        typeof window.ISATV.playIsaflix === 'function') {
+1014: +        window.ISATV.playIsaflix(
+1015: +            cleanMediaTitle(name || 'İSAFLIX'),
+1025: +        name:name || 'İSAFLIX',
+1028: +        group:'İSAFLIX',
+1042: -    const films = items.filter(item => !itemIsSeries(item));
+1043: -    const series = items.filter(item => itemIsSeries(item));
+1044: +    const films = [];
+1045: +    const series = [];
+1050: +        if (itemIsSeries(items[i])) series.push(entry);
+1051: +        else films.push(entry);
+1061: -        ${series.length ? '<h3>Diziler</h3>' : ''}
+1063: -            ${series.map(item => vodCard(item,'series',items.indexOf(item))).join('')}
+1066: -        ${films.length ? '<h3 style="margin-top:25px">Filmler ve diğer içerikler</h3>' : ''}
+1068: -            ${films.map(item => vodCard(item,'film',items.indexOf(item))).join('')}
+1071: +        ${series.length ? '<h3>Diziler</h3><div id="isa-series-grid" class="isa-provider-grid"></div>' : ''}
+1072: +        ${films.length ? '<h3 style="margin-top:25px">Filmler ve diğer içerikler</h3><div id="isa-films-grid" class="isa-provider-grid"></div>' : ''}
+1081: -            if (button.dataset.vod-kind === 'series') {
+1083: -                    openXtreamSeries(item,provider);
+1085: -                    showSeries(item,provider);
+1105: +                const kind = itemIsSeries(item) ? 'series' : 'film';
+1112: +                    if (kind === 'series') {
+1114: +                            openXtreamSeries(item,provider);
+1116: +                            showSeries(item,provider);
+1136: +    renderBatch(series,'isa-series-grid');
+1137: +    renderBatch(films,'isa-films-grid');
+1146: +async function openIsaFlixVODItem(item) {
+1158: +    const name = item.title || item.name || 'İSAFLIX';
+1164: +        playIsaFlix(name, media, headers, item.queue || [], item.queueIndex || 0);
+1175: +    const root = isaFlixRoot();
+1184: +        const resolved = await resolveStaticMedia(page);
+1188: +        if (!resolved) {
+1197: +        playIsaFlix(name, resolved, headers, item.queue || [], item.queueIndex || 0);
+1201: +        console.error('İSAFLIX video çözümleme:', error);
+1224: +// İSA FLIX - Catalog TAM KATALOG
+1225: +// Canlı TV + Filmler + Diziler
+1228: +const isaFlixState = {
+1229: +    mode: 'movies',
+1235: +    series: null,
+1236: +    season: null
+1239: +const ISAFLIX_WEB_SOURCES = [
+1240: +    {id:'dizipal',url:'https://dizipal2145.com/',kind:'mixed'},
+1241: +    {id:'ddizi',url:'https://www.ddizi.tel/',kind:'series'},
+1242: +    {id:'hdfilmcehennemi',url:'https://hdfilmcehennemi.mobi/',kind:'movie'},
+1243: +    {id:'hdfilmcehennemi-nl',url:'https://www.hdfilmcehennemi.nl/',kind:'movie'},
+1244: +    {id:'hdfilmizle-vip',url:'https://www.hdfilmizle.vip/',kind:'movie'},
+1245: +    {id:'hdfilmizle-live',url:'https://www.hdfilmizle.live/',kind:'movie'},
+1246: +    {id:'fullhdfilmizlesene',url:'https://www.fullhdfilmizlesene.now/',kind:'movie'}
+1249: +const ISAFLIX_WEB_CACHE_KEY = 'isaflix-web-discovery-v1';
+1251: +function isaFlixCatalog() {
+1252: +    return window.__ISAFLIX_WEB_CATALOG || {movies:[],series:[]};
+1255: +function isaFlixNormalizeTitle(value) {
+1266: +function isaFlixDiscoverType(text, sourceKind) {
+1268: +    if (/dizi|series|sezon|season|episode|bölüm|bolum|tv-show/.test(value))
+1269: +        return 'series';
+1270: +    if (/film|movie|sinema|full-hd/.test(value))
+1271: +        return 'movie';
+1272: +    return sourceKind === 'series' ? 'series' :
+1273: +           sourceKind === 'movie' ? 'movie' : '';
+1276: +function isaFlixPosterFromAnchor(anchor, baseUrl) {
+1286: +        return /^https?:$/.test(url.protocol) ? url.href : '';
+1292: +async function isaFlixDiscoverOneSource(source) {
+1312: +            const image = isaFlixPosterFromAnchor(anchor, base.href);
+1313: +            const title = isaFlixNormalizeTitle(
+1324: +            const type = isaFlixDiscoverType(
+1342: +                category_name:type === 'series' ? 'Diziler' : 'Filmler',
+1343: +                platform_name:type === 'series' ? 'Diziler' : 'Filmler',
+1349: +                episodes:[]
+1357: +async function isaFlixDiscoverWebCatalog() {
+1358: +    const empty = {movies:[],series:[]};
+1361: +        const cached = localStorage.getItem(ISAFLIX_WEB_CACHE_KEY);
+1364: +            if (parsed && Array.isArray(parsed.movies) &&
+1365: +                Array.isArray(parsed.series)) {
+1366: +                window.__ISAFLIX_WEB_CATALOG = parsed;
+1368: +                    'isa:catalog-catalog-updated', {detail:parsed}
+1377: +        while (cursor < ISAFLIX_WEB_SOURCES.length) {
+1378: +            const source = ISAFLIX_WEB_SOURCES[cursor++];
+1380: +                const items = await isaFlixDiscoverOneSource(source);
+1383: +                console.warn('İSAFLIX kaynak taraması tamamlanamadı:', source.id);
+1404: +    const catalog = {
+1405: +        movies:all.filter(x => x.type === 'movie'),
+1406: +        series:all.filter(x => x.type === 'series')
+1409: +    if (catalog.movies.length || catalog.series.length) {
+1410: +        window.__ISAFLIX_WEB_CATALOG = catalog;
+1412: +            localStorage.setItem(ISAFLIX_WEB_CACHE_KEY, JSON.stringify(catalog));
+1414: +    } else if (!window.__ISAFLIX_WEB_CATALOG) {
+1415: +        window.__ISAFLIX_WEB_CATALOG = empty;
+1419: +        'isa:catalog-catalog-updated',
+1420: +        {detail:window.__ISAFLIX_WEB_CATALOG}
+1424: +function isaFlixArray(value) {
+1428: +function isaFlixText(value, fallback='') {
+1432: +function isaFlixHeaders(item) {
+1439: +function isaFlixModeItems(data, mode) {
+1440: +    if (mode === 'live') return isaFlixArray(data.live_channels);
+1441: +    if (mode === 'movies') return isaFlixArray(data.movies);
+1442: +    return isaFlixArray(data.series);
+1445: +function isaFlixCategory(item, mode) {
+1446: +    if (mode === 'live') return isaFlixText(item.category_name, 'Genel');
+1447: +    if (mode === 'movies') return isaFlixText(item.category_name, 'Diğer');
+1448: +    return isaFlixText(item.platform_name || item.category_name, 'Diğer');
+1451: +function isaFlixCategories(data, mode) {
+1453: +    if (mode === 'live') source = isaFlixArray(data.live_categories);
+1454: +    if (mode === 'movies') source = isaFlixArray(data.movie_categories);
+1455: +    if (mode === 'series') source = isaFlixArray(data.series_platforms);
+1457: +    let names = source.map(x => isaFlixText(x.name).trim()).filter(Boolean);
+1459: +        names = [...new Set(isaFlixModeItems(data, mode).map(x =>
+1460: +            isaFlixCategory(x, mode)
+1466: +function isaFlixRoot() {
+1470: +function isaFlixOpen() {
+1475: +function isaFlixRender() {
+1476: +    const root = isaFlixRoot();
+1479: +    const data = isaFlixCatalog();
+1481: +        ['movies', 'Filmler', 'fa-film'],
+1482: +        ['series', 'Diziler', 'fa-clapperboard']
+1485: +    const totalMovies = isaFlixArray(data.movies).length;
+1486: +    const totalSeries = isaFlixArray(data.series).length;
+1492: +                ${totalMovies.toLocaleString('tr-TR')} film ·
+1493: +                ${totalSeries.toLocaleString('tr-TR')} dizi
+1499: +                    class="${isaFlixState.mode===id?'active':''}">
+1506: +                placeholder="İçerik ara..." value="${esc(isaFlixState.query)}">
+1509: +                ${isaFlixCategories(data,isaFlixState.mode).map(name => `
+1511: +                        ${isaFlixState.category===name?'selected':''}>
+1526: +            isaFlixState.mode = button.dataset.isafMode;
+1527: +            isaFlixState.category = '';
+1528: +            isaFlixState.query = '';
+1529: +            isaFlixState.series = null;
+1530: +            isaFlixRender();
+1538: +        isaFlixState.query = search.value;
+1539: +        isaFlixRenderItems();
+1543: +        isaFlixState.category = category.value;
+1544: +        isaFlixRenderItems();
+1547: +    isaFlixRenderItems();
+1550: +function isaFlixRenderItems() {
+1551: +    const data = isaFlixCatalog();
+1557: +    const mode = isaFlixState.mode;
+1558: +    const query = isaFlixState.query.trim().toLocaleLowerCase('tr');
+1559: +    const category = isaFlixState.category;
+1561: +    let items = isaFlixModeItems(data, mode);
+1564: +        if (category && isaFlixCategory(item,mode) !== category) return false;
+1575: +    isaFlixState.items = items;
+1576: +    isaFlixState.shown = 0;
+1589: +    more.onclick = isaFlixLoadMore;
+1590: +    isaFlixLoadMore();
+1593: +function isaFlixLoadMore() {
+1599: +    const items = isaFlixState.items;
+1600: +    const start = isaFlixState.shown;
+1601: +    const end = Math.min(start + isaFlixState.batch, items.length);
+1606: +        const mode = isaFlixState.mode;
+1611: +            ? isaFlixCategory(item,mode)
+1612: +            : [item.year, isaFlixCategory(item,mode)].filter(Boolean).join(' · ');
+1634: +            icon.className = 'fas ' + (mode==='live'?'fa-tv':'fa-film');
+1639: +        card.onclick = () => isaFlixOpenItem(item, i);
+1644: +    isaFlixState.shown = end;
+1653: +function isaFlixOpenItem(item) {
+1654: +    const mode = isaFlixState.mode;
+1657: +        const data = isaFlixCatalog();
+1658: +        const category = isaFlixCategory(item,'live');
+1659: +        const queue = isaFlixArray(data.live_channels)
+1660: +            .filter(x => isaFlixCategory(x,'live') === category)
+1667: +                headers:isaFlixHeaders(x),
+1677: +    if (mode === 'movies') {
+1679: +        if (!/^https?:\/\//i.test(url)) {
+1680: +            alert('Bu film için geçerli bağlantı bulunamadı.');
+1684: +            openIsaFlixVODItem({
+1685: +                name:item.title || item.name || 'Film',
+1686: +                title:item.title || item.name || 'Film',
+1691: +                headers:isaFlixHeaders(item),
+1698: +        const queue = isaFlixArray(isaFlixState.items)
+1701: +                name:cleanMediaTitle(x.title || x.name || 'Film'),
+1704: +                group:isaFlixCategory(x,'movies'),
+1705: +                headers:isaFlixHeaders(x),
+1706: +                season:0,
+1707: +                episode:0,
+1713: +            x.name === cleanMediaTitle(item.title || item.name || 'Film')
+1720: +            alert('Film oynatma listesine eklenemedi.');
+1724: +        openIsaFlixVODItem({
+1725: +            name:item.title || item.name || 'Film',
+1726: +            title:item.title || item.name || 'Film',
+1731: +            headers:isaFlixHeaders(item),
+1739: +    isaFlixShowSeries(item);
+1742: +async function isaFlixLoadWebSeries(series) {
+1743: +    if (series.__webEpisodesLoaded) return;
+1744: +    series.__webEpisodesLoaded = true;
+1746: +    if (!isHttp(series.page_url)) return;
+1748: +    const html = await nativeFetch(series.page_url);
+1750: +    const base = new URL(series.page_url);
+1751: +    const episodes = [];
+1761: +            const title = isaFlixNormalizeTitle(
+1770: +            if (!/bölüm|bolum|episode|part|s\d+e\d+|\d+x\d+|sezon|season/i.test(hint))
+1776: +            const episode = {
+1782: +            episode.season_number = isaFlixExplicitSeasonNumber(episode);
+1783: +            episode.episode_number = isaFlixExplicitEpisodeNumber(episode);
+1785: +            episodes.push(episode);
+1789: +    series.episodes = episodes;
+1792: +function isaFlixExplicitSeasonNumber(item) {
+1793: +    const raw = item.season_number ?? item.season;
+1803: +        item.season
+1809: +        /\b(?:season|sezon)[\s._-]*0*(\d+)\b/i,
+1810: +        /\b0*(\d+)[\s._-]*(?:season|sezon)\b/i
+1821: +function isaFlixExplicitEpisodeNumber(item) {
+1822: +    const raw = item.episode_number ?? item.episode ?? item.episode_num;
+1837: +        /(?:bölüm|bolum|episode|ep)[\s._-]*0*(\d+)/i
+1849: +function isaFlixShowSeries(series) {
+1850: +    const root = isaFlixRoot();
+1853: +    const episodes = isaFlixArray(series.episodes);
+1855: +    if (!episodes.length && series.page_url && !series.__webEpisodesLoaded) {
+1858: +        isaFlixLoadWebSeries(series)
+1859: +            .then(() => isaFlixShowSeries(series))
+1861: +                series.__webEpisodesLoaded = true;
+1862: +                isaFlixShowSeries(series);
+1867: +    const prepared = episodes.map((episode, index) => ({
+1868: +        ...episode,
+1870: +        __realSeason: isaFlixExplicitSeasonNumber(episode),
+1871: +        __realEpisode: isaFlixExplicitEpisodeNumber(episode)
+1874: +    const seasons = new Map();
+1876: +    for (const episode of prepared) {
+1877: +        const number = episode.__realSeason;
+1879: +        if (!seasons.has(number)) seasons.set(number, []);
+1880: +        seasons.get(number).push(episode);
+1883: +    const seasonNumbers = [...seasons.keys()].sort((a, b) => a - b);
+1884: +    const poster = series.poster_url || series.image_url || '';
+1887: +    if (!seasonNumbers.some(number => number > 0)) {
+1888: +        isaFlixShowEpisodes(series, 0, prepared);
+1898: +            <h2>${esc(series.title || series.name || 'Dizi')}</h2>
+1899: +            <p>${esc(series.description || '')}</p>
+1900: +            <div class="isaf-season-grid">
+1901: +                ${seasonNumbers.map((number, index) => `
+1902: +                    <button class="isaf-season" data-isaf-season="${index}">
+1904: +                        <small>${seasons.get(number).length} bölüm</small>
+1908: +            ${episodes.length ? '' : '<p class="isa-vod-note">Bu dizide bölüm bulunamadı.</p>'}
+1913: +        isaFlixState.mode = 'series';
+1914: +        isaFlixRender();
+1917: +    root.querySelectorAll('[data-isaf-season]').forEach(button => {
+1919: +            const number = seasonNumbers[Number(button.dataset.isafSeason)];
+1920: +            isaFlixShowEpisodes(series, number, seasons.get(number));
+1926: +function isaFlixShowEpisodes(series, number, episodes) {
+1927: +    const root = isaFlixRoot();
+1930: +    const sortedEpisodes = [...episodes].sort((a, b) => {
+1931: +        const an = isaFlixExplicitEpisodeNumber(a);
+1932: +        const bn = isaFlixExplicitEpisodeNumber(b);
+1941: +    const seriesTitle = series.title || series.name || 'Dizi';
+1945: +            <button class="isa-back" id="isaf-season-back">
+1949: +            <h2>${esc(seriesTitle)}${number > 0 ? ' · Sezon ' + number : ''}</h2>
+1950: +            <div class="isaf-season-grid">
+1951: +                ${sortedEpisodes.map((episode, index) => {
+1952: +                    const realNumber = isaFlixExplicitEpisodeNumber(episode);
+1953: +                    const label = episode.title || episode.name ||
+1957: +                        <button class="isaf-season" data-isaf-episode="${index}">
+1967: +    document.getElementById('isaf-season-back').onclick =
+1968: +        () => isaFlixShowSeries(series);
+1970: +    root.querySelectorAll('[data-isaf-episode]').forEach(button => {
+1972: +            const episode = sortedEpisodes[Number(button.dataset.isafEpisode)];
+1973: +            const url = episode.stream_url || '';
+1975: +            const seasonNumber =
+1976: +                isaFlixExplicitSeasonNumber(episode) ||
+1979: +            const episodeNumber = isaFlixExplicitEpisodeNumber(episode);
+1981: +            if (!/^https?:\/\//i.test(url) && isHttp(episode.page_url)) {
+1987: +                resolveStaticMedia(episode.page_url)
+1988: +                    .then(resolved => {
+1990: +                        if (!resolved) throw new Error('Video bulunamadı.');
+1992: +                        const showName = cleanMediaTitle(seriesTitle);
+1995: +                            url: resolved,
+1996: +                            headers: {Referer: episode.page_url},
+1997: +                            season: seasonNumber,
+1998: +                            episode: episodeNumber,
+2000: +                            is_series: true,
+2001: +                            series_id: series.id || series.series_id || series.page_url,
+2002: +                            series_name: showName,
+2003: +                            series_url: series.page_url || ''
+2006: +                        playIsaFlix(showName, resolved, entry.headers, [entry], 0);
+2016: +            if (!/^https?:\/\//i.test(url)) {
+2021: +            const allEpisodes = isaFlixArray(series.episodes)
+2024: +                    __season: isaFlixExplicitSeasonNumber(ep),
+2025: +                    __episode: isaFlixExplicitEpisodeNumber(ep)
+2029: +                    a.__season - b.__season ||
+2030: +                    a.__episode - b.__episode
+2033: +            const showName = cleanMediaTitle(seriesTitle);
+2035: +            const queue = allEpisodes.map(ep => ({
+2038: +                logo: ep.image_url || series.poster_url || series.image_url || '',
+2039: +                group: series.platform_name || 'Diziler',
+2040: +                headers: isaFlixHeaders(ep),
+2041: +                season: ep.__season,
+2042: +                episode: ep.__episode,
+2048: +                x.season === seasonNumber &&
+2049: +                x.episode === episodeNumber
+2059: +            playIsaFlix(
+2062: +                isaFlixHeaders(episode),
+2070: +window.addEventListener('isa:catalog-catalog-updated', event => {
+2073: +    if (isaFlixRoot()) isaFlixRender();
+2077: +function isaFlixInit() {
+2085: +    const data = isaFlixCatalog();
+2088: +        isaFlixRender();
+2093:      const films = document.getElementById('isa-films-panel');
+2094:      const series = document.getElementById('isa-series-panel');
+2099: +    isaFlixInit();
+2105: +    isaFlixDiscoverWebCatalog();
+2111: app/src/main/assets/isa-tv-hd/css/isa-style.css <=> review-upload/extracted-source/app/src/main/assets/isa-tv-hd/css/isa-style.css
+2114: +++ review-upload/extracted-source/app/src/main/assets/isa-tv-hd/css/isa-style.css
+2120: +/* İSA TV HD - sıkı dört sütun katalog düzeni */
+2169: +/* İSA TV HD performans ve katalog düzeni */
+2204: +/* İSA FLIX - Catalog katalog arayüzü */
+2217: +.isaf-grid,.isaf-season-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
+2218: +.isaf-card,.isaf-season { display:flex; min-width:0; flex-direction:column; align-items:center; overflow:hidden; padding:5px; border:1px solid var(--line); border-radius:9px; background:var(--panel); color:var(--text); text-align:center; }
+2221: +.isaf-card strong,.isaf-season strong { width:100%; margin-top:6px; overflow:hidden; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; font-size:11px; line-height:1.35; overflow-wrap:anywhere; }
+2222: +.isaf-card small,.isaf-season small { width:100%; margin-top:4px; color:var(--muted); font-size:9px; }
+2228: +.isaf-season { min-height:90px; justify-content:center; padding:12px 5px; }
+2229: +.isaf-season i { color:#f4cf35; font-size:24px; margin-bottom:8px; }
+2231: +    .isaf-grid,.isaf-season-grid { gap:5px; }
+
+======================================================================
+DOSYA: review-upload/termux-inspection-20261102-012102.txt
+SATIR SAYISI: 1719
+6: 93fc9ff Analyze ISAFLIX search engines
+7: aa1cc92 Collect real categories for ISAFLIX sources
+8: e2776a7 Add seven ISAFLIX source site analysis
+10: 718b494 Fix ISAFLIX season and episode detection
+11: cb7d188 Add complete JavaScript source bundle for ISAFLIX review
+12: fb62ecc Upload ISAFLIX catalog generator and repair sources
+13: 18c8f77 Restore ISAFLIX catalog before faulty filter patch
+19:  M review-upload/extracted-source/build/reports/problems/problems-report.html
+20: ?? INCELEME/ISAFLIX_ONCEKI_20261101-210409/
+21: ?? INCELEME/ISAFLIX_YEDEK_20261101_210630/
+23: ?? INCELEME/isaflix-web-katalog.json.onceki
+24: ?? ISAFLIX_ONCEKI_KAYNAK/
+25: ?? ISAFLIX_TEST_FILM_KAYDI.json
+33: ?? review-upload/extracted-source/app/src/main/AndroidManifest.xml.isaflix-backup
+34: ?? review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js.backup-20261101-231008
+35: ?? review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js.backup-20261102-010000
+36: ?? review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js.backup-20261102-010032
+37: ?? review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js.backup-20261102-010059
+38: ?? review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js.backup-final-season-20261102-001155
+39: ?? review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js.backup-isaflix-7-kaynak-20261102-000431
+40: ?? review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js.backup-season-20261102-000856
+41: ?? review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js.backup-season-fix-20261102-000950
+42: ?? review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js.backup-smart-20261101-233151
+43: ?? review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js.bak-20261101-221958
+44: ?? review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js.before-webview-20261101-235637
+45: ?? review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js.failed-smart-20261101-233951
+46: ?? review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js.isaflix-backup
+47: ?? review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js.onceki-20261101-225620.bak
+48: ?? review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java.backup-20261101-222122
+49: ?? review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java.backup-20261101-230747
+50: ?? review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java.backup-20261101-230846
+51: ?? review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java.backup-final-season-20261102-001155
+52: ?? review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java.backup-season-20261102-000856
+53: ?? review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java.backup-season-fix-20261102-000950
+54: ?? review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java.bak-20261101-221958
+55: ?? review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java.before-webview-20261101-235637
+56: ?? review-upload/extracted-source/app/src/main/java/com/isatvhd/player/MainActivity.java.isaflix-backup
+58:  .../extracted-source/build/reports/problems/problems-report.html        | 2 +-
+64: Hide technical ISAFLIX playback errors
+71: INCELEME/ISAFLIX_FAVORI_TAM_KAYNAK.txt
+72: INCELEME/ISAFLIX_GUNCEL_DUZELTME_KAYNAKLARI.txt
+73: INCELEME/ISAFLIX_GUNCEL_KAYNAK.txt
+74: INCELEME/ISAFLIX_GUNCEL_YEREL_KAYNAKLAR.txt
+75: INCELEME/ISAFLIX_HATA_TESPITI.txt
+76: INCELEME/ISAFLIX_TAM_KAYNAK_PAKETI.txt
+77: INCELEME/ISAFLIX_TAM_PROJE_KAYNAKLARI.txt
+79: INCELEME/isaflix-web-katalog-raporu.json
+80: INCELEME/isaflix-web-katalog.json
+81: INCELEME/katalog-analiz.json
+105: KAYNAK-TAM/app/src/main/assets/isa-tv-hd/js/fixed-player.js.txt
+107: KAYNAK-TAM/app/src/main/assets/isa-tv-hd/js/isa-player-source.js.txt
+109: KAYNAK-TAM/app/src/main/assets/isa-tv-hd/js/player.js.txt
+113: KAYNAK-TAM/app/src/main/assets/isa-tv-hd/player.html.txt
+115: KAYNAK-TAM/app/src/main/java/com/isatvhd/player/MainActivity.java.64mb-yedek.txt
+116: KAYNAK-TAM/app/src/main/java/com/isatvhd/player/MainActivity.java.onceki-yedek.txt
+117: KAYNAK-TAM/app/src/main/java/com/isatvhd/player/MainActivity.java.txt
+118: KAYNAK-TAM/app/src/main/java/com/isatvhd/player/PlayerActivity.java.txt
+119: KAYNAK-TAM/app/src/main/java/com/isatvhd/player/SplashActivity.java.txt
+122: KAYNAK-TAM/app/src/main/res/layout/isa_player_view.xml.txt
+147: app/src/main/assets/isa-tv-hd/js/fixed-player.js
+149: app/src/main/assets/isa-tv-hd/js/isa-player-source.js
+151: app/src/main/assets/isa-tv-hd/js/player.js
+155: app/src/main/assets/isa-tv-hd/player.html
+157: app/src/main/java/com/isatvhd/player/MainActivity.java
+158: app/src/main/java/com/isatvhd/player/PlayerActivity.java
+159: app/src/main/java/com/isatvhd/player/SplashActivity.java
+164: app/src/main/res/layout/isa_player_view.xml
+173: loglar/isaflix-log.txt
+177: review-upload/extracted-source/.gitignore
+178: review-upload/extracted-source/INCELEME-CIKTISI.txt
+179: review-upload/extracted-source/ISA-TV-HD-INCELEME.zip
+180: review-upload/extracted-source/ISA-TV-HD-KAYNAK.zip
+181: review-upload/extracted-source/app/build.gradle
+182: review-upload/extracted-source/app/src/main/AndroidManifest.xml
+183: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/404.html
+184: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/about.html
+185: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/assets/android-chrome-192x192.png
+186: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/assets/android-chrome-512x512.png
+187: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/assets/apple-touch-icon.png
+188: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/assets/favicon-16x16.png
+189: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/assets/favicon-32x32.png
+190: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/assets/favicon.ico
+191: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/assets/logo.png
+192: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/assets/streamflix-icon.ico
+193: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/assets/streamflix-icon.png
+194: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/css/isa-style.css
+195: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/css/style.css
+196: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/download.html
+197: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/index.html
+198: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/fixed-player.js
+199: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/homepage.js
+200: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-player-source.js
+201: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js
+202: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/player.js
+203: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/pwa-register.js
+204: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/tr-translation.js
+205: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/manifest.webmanifest
+206: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/player.html
+207: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/sw.js
+208: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java
+209: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/MainActivity.java
+210: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/MainActivity.java.64mb-yedek
+211: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/MainActivity.java.onceki-yedek
+212: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/PlayerActivity.java
+213: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/SplashActivity.java
+214: review-upload/extracted-source/app/src/main/res/drawable-nodpi/launcher_logo.png
+215: review-upload/extracted-source/app/src/main/res/drawable-nodpi/logo.png
+216: review-upload/extracted-source/app/src/main/res/drawable/ic_launcher_background.xml
+217: review-upload/extracted-source/app/src/main/res/drawable/ic_launcher_foreground.xml
+218: review-upload/extracted-source/app/src/main/res/layout/isa_player_view.xml
+219: review-upload/extracted-source/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+220: review-upload/extracted-source/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+221: review-upload/extracted-source/app/src/main/res/values/styles.xml
+222: review-upload/extracted-source/build.gradle
+223: review-upload/extracted-source/build/reports/problems/problems-report.html
+224: review-upload/extracted-source/dist/ISA-TV-HD.apk
+225: review-upload/extracted-source/gradle.properties
+226: review-upload/extracted-source/release/ISA-TV-HD.apk
+227: review-upload/extracted-source/settings.gradle
+233: app/src/main/assets/isa-tv-hd/js/fixed-player.js
+235: app/src/main/assets/isa-tv-hd/js/isa-player-source.js
+237: app/src/main/assets/isa-tv-hd/js/player.js
+241: app/src/main/java/com/isatvhd/player/MainActivity.java
+242: app/src/main/java/com/isatvhd/player/PlayerActivity.java
+243: app/src/main/java/com/isatvhd/player/SplashActivity.java
+244: review-upload/extracted-source/app/build.gradle
+245: review-upload/extracted-source/app/build/intermediates/assets/debug/mergeDebugAssets/isa-tv-hd/js/fixed-player.js
+246: review-upload/extracted-source/app/build/intermediates/assets/debug/mergeDebugAssets/isa-tv-hd/js/homepage.js
+247: review-upload/extracted-source/app/build/intermediates/assets/debug/mergeDebugAssets/isa-tv-hd/js/isa-player-source.js
+248: review-upload/extracted-source/app/build/intermediates/assets/debug/mergeDebugAssets/isa-tv-hd/js/isa-sources.js
+249: review-upload/extracted-source/app/build/intermediates/assets/debug/mergeDebugAssets/isa-tv-hd/js/player.js
+250: review-upload/extracted-source/app/build/intermediates/assets/debug/mergeDebugAssets/isa-tv-hd/js/pwa-register.js
+251: review-upload/extracted-source/app/build/intermediates/assets/debug/mergeDebugAssets/isa-tv-hd/js/tr-translation.js
+252: review-upload/extracted-source/app/build/intermediates/assets/debug/mergeDebugAssets/isa-tv-hd/sw.js
+253: review-upload/extracted-source/app/build/intermediates/merged_manifest/debug/processDebugMainManifest/AndroidManifest.xml
+254: review-upload/extracted-source/app/build/intermediates/merged_manifests/debug/processDebugManifest/AndroidManifest.xml
+255: review-upload/extracted-source/app/build/intermediates/packaged_manifests/debug/processDebugManifestForPackage/AndroidManifest.xml
+256: review-upload/extracted-source/app/src/main/AndroidManifest.xml
+257: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/fixed-player.js
+258: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/homepage.js
+259: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-player-source.js
+260: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js
+261: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/player.js
+262: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/pwa-register.js
+263: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/tr-translation.js
+264: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/sw.js
+265: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java
+266: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/MainActivity.java
+267: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/PlayerActivity.java
+268: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/SplashActivity.java
+269: review-upload/extracted-source/build.gradle
+270: review-upload/extracted-source/settings.gradle
+300:     namespace 'com.isatvhd.player'
+305:         applicationId 'com.isatvhd.player'
+322:     implementation 'androidx.media3:media3-exoplayer:1.4.1'
+323:     implementation 'androidx.media3:media3-exoplayer-hls:1.4.1'
+324:     implementation 'androidx.media3:media3-ui:1.4.1'
+342: ----- review-upload/extracted-source/build.gradle -----
+346: ----- review-upload/extracted-source/settings.gradle -----
+363: ----- review-upload/extracted-source/app/build.gradle -----
+369:     namespace 'com.isatvhd.player'
+374:         applicationId 'com.isatvhd.player'
+391:     implementation 'androidx.media3:media3-exoplayer:1.4.1'
+392:     implementation 'androidx.media3:media3-exoplayer-hls:1.4.1'
+393:     implementation 'androidx.media3:media3-exoplayer-dash:1.4.1'
+394:     implementation 'androidx.media3:media3-ui:1.4.1'
+415: <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+429:             android:name=".PlayerActivity"
+450: ----- review-upload/extracted-source/app/src/main/AndroidManifest.xml -----
+451: <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+465:             android:name=".PlayerActivity"
+469:             android:name=".IsaflixPlayerActivity"
+492: ----- review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java -----
+493: package com.isatvhd.player;
+511: import android.webkit.WebView;
+512: import android.webkit.WebViewClient;
+519: import androidx.media3.common.C;
+520: import androidx.media3.common.MediaItem;
+521: import androidx.media3.common.PlaybackException;
+522: import androidx.media3.common.Player;
+523: import androidx.media3.datasource.DefaultHttpDataSource;
+524: import androidx.media3.exoplayer.ExoPlayer;
+525: import androidx.media3.exoplayer.hls.HlsMediaSource;
+526: import androidx.media3.exoplayer.dash.DashMediaSource;
+527: import androidx.media3.exoplayer.source.MediaSource;
+528: import androidx.media3.exoplayer.source.ConcatenatingMediaSource;
+529: import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+530: import androidx.media3.ui.PlayerView;
+540: public class IsaflixPlayerActivity extends Activity {
+542:     private ExoPlayer player;
+543:     private PlayerView playerView;
+546:     private TextView episodeView;
+550:     private WebView webView;
+552:     private boolean websitePlaybackMode = false;
+558:     private final Runnable hideEpisodeInfo = () -> {
+559:         if (episodeView != null
+562:             episodeView.animate().alpha(0f).setDuration(250)
+563:                     .withEndAction(() -> episodeView.setVisibility(View.GONE))
+590:             initializePlayer();
+592:             startWebsitePlayback(url);
+625:                 android.util.Log.e("ISAFLIX", "Kuyruk okunamadı", e);
+649:         playerView = new PlayerView(this);
+650:         playerView.setUseController(true);
+651:         playerView.setControllerAutoShow(true);
+652:         playerView.setControllerHideOnTouch(true);
+653:         playerView.setControllerShowTimeoutMs(3000);
+654:         playerView.setShowBuffering(
+655:                 PlayerView.SHOW_BUFFERING_WHEN_PLAYING
+658:         root.addView(playerView, new FrameLayout.LayoutParams(
+719:         episodeView = new TextView(this);
+720:         episodeView.setTextColor(0xFFE5E5E5);
+721:         episodeView.setTextSize(13);
+723:         FrameLayout.LayoutParams episodeParams =
+729:         episodeParams.topMargin = dp(48);
+730:         info.addView(episodeView, episodeParams);
+756:         favoriteButton.setContentDescription("İSAFLIX favorilere ekle");
+791:     private void startWebsitePlayback(String pageUrl) {
+792:         websitePlaybackMode = true;
+801:         playerView.setVisibility(View.GONE);
+805:         webView = new WebView(this);
+806:         WebSettings settings = webView.getSettings();
+810:         settings.setMediaPlaybackRequiresUserGesture(true);
+819:         cookies.setAcceptThirdPartyCookies(webView, true);
+821:         webView.addJavascriptInterface(new WebsiteBridge(), "ISAWebsiteBridge");
+832:         webView.setWebChromeClient(new WebChromeClient() {
+835:                     WebView view, boolean dialog, boolean userGesture,
+837:                 // Popup pencereleri ana WebView dışında açılmaz.
+842:         webView.setWebViewClient(new WebViewClient() {
+845:                     WebView view, String url) {
+862:             public void onPageFinished(WebView view, String url) {
+871:         root.addView(webView, 0, params);
+872:         webView.loadUrl(pageUrl);
+876:         if (webView == null) return;
+922:         webView.evaluateJavascript(script, null);
+933:         if (websiteMediaAccepted || !websitePlaybackMode) return;
+936:             // DRM içeriği sitenin kendi WebView oynatıcısında kalır.
+937:             android.util.Log.i("ISAFLIX", "DRM algılandı; WebView oynatması korunuyor.");
+958:             if (webView != null) {
+959:                 webView.stopLoading();
+960:                 root.removeView(webView);
+961:                 webView.destroy();
+962:                 webView = null;
+965:             websitePlaybackMode = false;
+966:             playerView.setVisibility(View.VISIBLE);
+968:             initializePlayer();
+971:             android.util.Log.e("ISAFLIX", "Medya aktarımı başarısız", e);
+1045:     private void initializePlayer() {
+1060:             player = new ExoPlayer.Builder(this).build();
+1061:             playerView.setPlayer(player);
+1063:             player.addListener(new Player.Listener() {
+1065:                 public void onPlaybackStateChanged(int state) {
+1066:                     if (state == Player.STATE_READY) {
+1069:                         playerView.showController();
+1070:                     } else if (state == Player.STATE_BUFFERING) {
+1073:                     } else if (state == Player.STATE_ENDED) {
+1087:                 public void onPlayerError(PlaybackException error) {
+1092:                             "ISAFLIX", "Oynatma hatası", error
+1101:             player.setMediaSource(playlist);
+1102:             player.seekTo(index, 0L);
+1103:             player.prepare();
+1104:             player.play();
+1109:             android.util.Log.e("ISAFLIX", "Oynatıcı başlatılamadı", e);
+1118:         if (player == null || queue.isEmpty()) return;
+1120:         int index = player.getCurrentMediaItemIndex();
+1129:         titleView.setText(name == null ? "İSAFLIX" : name);
+1131:         int season = item.optInt("season", 0);
+1132:         int episode = item.optInt("episode", 0);
+1134:         infoHandler.removeCallbacks(hideEpisodeInfo);
+1136:         if (season > 0 || episode > 0) {
+1137:             episodeView.animate().cancel();
+1138:             episodeView.setAlpha(1f);
+1140:             String episodeInfo;
+1141:             if (season > 0 && episode > 0) {
+1142:                 episodeInfo = "Sezon " + season + "  ·  " + episode + ". Bölüm";
+1143:             } else if (season > 0) {
+1144:                 episodeInfo = "Sezon " + season;
+1146:                 episodeInfo = episode + ". Bölüm";
+1149:             episodeView.setText(episodeInfo);
+1155:             episodeView.setVisibility(View.VISIBLE);
+1158:                 infoHandler.postDelayed(hideEpisodeInfo, 5000L);
+1161:             episodeView.setVisibility(View.GONE);
+1166:         boolean series = item.optBoolean("is_series", false)
+1167:                 || "series".equalsIgnoreCase(item.optString("type", ""))
+1168:                 || item.optInt("season", 0) > 0;
+1170:         String parentId = item.optString("series_id",
+1172:         if (series) {
+1173:             String parentName = item.optString("series_name",
+1174:                     item.optString("name", "İSAFLIX dizisi"));
+1175:             return "series:" + (parentId.isEmpty() ? parentName : parentId);
+1179:         return "movie:" + (id.isEmpty()
+1186:         int index = player == null ? 0 : player.getCurrentMediaItemIndex();
+1197:                     prefs.getString("isaflix_favorites", "[]"));
+1207:             android.util.Log.e("ISAFLIX", "Favoriler okunamadı", e);
+1219:         int index = player == null ? 0 : player.getCurrentMediaItemIndex();
+1224:         boolean series = favoriteId.startsWith("series:");
+1231:                     prefs.getString("isaflix_favorites", "[]"));
+1249:                 record.put("name", series
+1250:                         ? item.optString("series_name",
+1251:                             item.optString("name", "İSAFLIX dizisi"))
+1252:                         : item.optString("name", "İSAFLIX filmi"));
+1253:                 record.put("url", series
+1254:                         ? item.optString("series_url",
+1259:                 record.put("type", series ? "series" : "movie");
+1260:                 record.put("is_series", series);
+1261:                 if (series) {
+1262:                     record.put("series_id",
+1263:                             item.optString("series_id",
+1269:             prefs.edit().putString("isaflix_favorites",
+1274:             android.util.Log.e("ISAFLIX", "Favori kaydedilemedi", e);
+1313:             android.util.Log.e("ISAFLIX", "Logo yüklenemedi", e);
+1321:                 && player != null) {
+1328:                 if (player.hasNextMediaItem()) {
+1329:                     player.seekToNextMediaItem();
+1337:                 if (player.hasPreviousMediaItem()) {
+1338:                     player.seekToPreviousMediaItem();
+1377:         if (player != null) player.pause();
+1378:         if (webView != null) webView.onPause();
+1385:         if (playerView != null) playerView.setPlayer(null);
+1386:         if (player != null) {
+1387:             player.release();
+1388:             player = null;
+1390:         if (webView != null) {
+1391:             webView.stopLoading();
+1392:             webView.destroy();
+1393:             webView = null;
+1400: ----- app/src/main/java/com/isatvhd/player/MainActivity.java -----
+1415: 207-                        PlayerActivity.class
+1440: 450-            if (address == null || !(address.startsWith("https://") || address.startsWith("http://"))) return;
+1450: ----- review-upload/extracted-source/app/src/main/java/com/isatvhd/player/MainActivity.java -----
+1465: 207-                        PlayerActivity.class
+1492: 247:        // ISAFLIX_QUEUE_V2
+1494: 249:        public void playIsaflix(
+1506: 283:                            "isaflix-player-queue.json"
+1518: 296:                            IsaflixPlayerActivity.class
+1523: 301-                            name == null ? "İSAFLIX" : name
+1534: 312-                    Log.e(TAG, "İSAFLIX kuyruğu aktarılamadı", e);
+1538: 377-        public String readCatalogChunk(String offsetText, int requestedBytes) {
+1543: 382:                    getCacheDir(), "isaflix-web-katalog.json"
+1550: 418-        public void loadCachedCatalogCatalog(String callbackId) {
+1555: 423:                getCacheDir(), "isaflix-web-katalog.json"
+1567: 462:                        getCacheDir(), "isaflix-web-katalog.json"
+1571: 466:                        getSharedPreferences("isaflix_web_catalog", MODE_PRIVATE);
+1577: 472:                        "https://raw.githubusercontent.com/thechampisher/ISA-TV-HD/main/INCELEME/isaflix-web-katalog.json"
+1588: 567-                final java.io.File catalogFile = new java.io.File(
+1589: 568:                    getCacheDir(), "isaflix-web-katalog.json"
+1592: 571-                final long catalogSize =
+1593: 572-                    failure == null && catalogFile.isFile()
+1594: 573-                    ? catalogFile.length() : 0L;
+1597: 917-            if (address == null || !(address.startsWith("https://") || address.startsWith("http://"))) return;
+1609: app/src/main/assets/isa-tv-hd/js/fixed-player.js:148:        const validExtensions = ['.m3u8', '.mp4', '.ts', '.webm'];
+1622: app/src/main/assets/isa-tv-hd/js/isa-sources.js:1910:        root.querySelector('[data-series-back]').onclick=()=>openMediaSource(source,kind,root);
+1623: app/src/main/assets/isa-tv-hd/js/player.js:153:        const validExtensions = ['.m3u8', '.mp4', '.ts', '.webm'];
+1624: app/src/main/java/com/isatvhd/player/PlayerActivity.java:28:import androidx.media3.exoplayer.hls.HlsMediaSource;
+1625: app/src/main/java/com/isatvhd/player/PlayerActivity.java:671:                        if (uri.contains(".m3u8")) {
+1626: app/src/main/java/com/isatvhd/player/PlayerActivity.java:725:            boolean isHls = lowerUrl.contains(".m3u8");
+1627: app/src/main/java/com/isatvhd/player/PlayerActivity.java:758:            androidx.media3.exoplayer.source.MediaSource mediaSource;
+1628: app/src/main/java/com/isatvhd/player/PlayerActivity.java:761:                mediaSource = new HlsMediaSource.Factory(factory)
+1629: app/src/main/java/com/isatvhd/player/PlayerActivity.java:763:                        .createMediaSource(item);
+1630: app/src/main/java/com/isatvhd/player/PlayerActivity.java:765:                mediaSource =
+1631: app/src/main/java/com/isatvhd/player/PlayerActivity.java:766:                        new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(
+1632: app/src/main/java/com/isatvhd/player/PlayerActivity.java:768:                        ).createMediaSource(item);
+1633: app/src/main/java/com/isatvhd/player/PlayerActivity.java:771:            target.setMediaSource(mediaSource);
+1634: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/fixed-player.js:148:        const validExtensions = ['.m3u8', '.mp4', '.ts', '.webm'];
+1635: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/homepage.js:232:            url.includes('.m3u8') || 
+1636: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/homepage.js:510:        const url = prompt('Enter a stream URL (YouTube, m3u8, mp4, etc.):');
+1637: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js:477:        return /\.(m3u8|mp4|mpd|mp3|m4a|aac|ts|mkv|webm|m4v|mov|ogg|flv|mpeg|mpg|3gp|avi)$/i.test(path);
+1638: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js:1768:        /<source[^>]+src=["']([^"']+\.(?:m3u8|mp4|webm)(?:\?[^"']*)?)["']/ig,
+1639: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js:1769:        /<video[^>]+src=["']([^"']+\.(?:m3u8|mp4|webm)(?:\?[^"']*)?)["']/ig,
+1640: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js:1770:        /(?:file|source|src|hls|playlist)\s*[:=]\s*["']([^"']+\.(?:m3u8|mp4|webm)(?:\?[^"']*)?)["']/ig,
+1641: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js:2245:function mediaSourceKey(source) { return [source.type,source.host||source.url||source.name||'',source.username||'',source.name||''].join('|'); }
+1642: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js:2264:    await openMediaSource(source, kind, root);
+1643: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js:2278:async function openMediaSource(source,kind,root) {
+1644: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js:2279:    localStorage.setItem('isa-active-media-'+kind,mediaSourceKey(source));
+1645: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js:2280:    const cacheKey=mediaSourceKey(source);
+1646: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js:2370:    root.querySelector('[data-media-back]').onclick=()=>openMediaSource(source,kind,root);
+1647: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/isa-sources.js:2403:        root.querySelector('[data-series-back]').onclick=()=>openMediaSource(source,kind,root);
+1648: review-upload/extracted-source/app/src/main/assets/isa-tv-hd/js/player.js:153:        const validExtensions = ['.m3u8', '.mp4', '.ts', '.webm'];
+1649: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/PlayerActivity.java:28:import androidx.media3.exoplayer.hls.HlsMediaSource;
+1650: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/PlayerActivity.java:671:                        if (uri.contains(".m3u8")) {
+1651: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/PlayerActivity.java:725:            boolean isHls = lowerUrl.contains(".m3u8");
+1652: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/PlayerActivity.java:758:            androidx.media3.exoplayer.source.MediaSource mediaSource;
+1653: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/PlayerActivity.java:761:                mediaSource = new HlsMediaSource.Factory(factory)
+1654: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/PlayerActivity.java:763:                        .createMediaSource(item);
+1655: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/PlayerActivity.java:765:                mediaSource =
+1656: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/PlayerActivity.java:766:                        new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(
+1657: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/PlayerActivity.java:768:                        ).createMediaSource(item);
+1658: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/PlayerActivity.java:771:            target.setMediaSource(mediaSource);
+1659: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:33:import androidx.media3.exoplayer.hls.HlsMediaSource;
+1660: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:34:import androidx.media3.exoplayer.dash.DashMediaSource;
+1661: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:35:import androidx.media3.exoplayer.source.MediaSource;
+1662: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:36:import androidx.media3.exoplayer.source.ConcatenatingMediaSource;
+1663: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:37:import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+1664: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:289:                    "(?i).*\\.(m3u8|mpd|mp4|m4v|webm|mkv|mov|3gp)$")) {
+1665: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:293:        return lower.contains("format=m3u8")
+1666: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:295:                || lower.contains("format=mpd")
+1667: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:412:            "if(v.currentSrc&&/^https?:/i.test(v.currentSrc))urls.push(v.currentSrc);" +
+1668: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:417:            "if(/\\.(m3u8|mpd|mp4|webm)(\\?|$)/i.test(x.name))urls.push(x.name);});" +
+1669: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:419:            "/\\.(m3u8|mpd|mp4|webm)(\\?|$)/i.test(x);});" +
+1670: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:483:    private MediaSource createMediaSource(JSONObject entry) {
+1671: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:529:        boolean isHls = path.endsWith(".m3u8")
+1672: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:530:                || lowerUrl.matches("(?s).*\\.m3u8(?:[?#].*)?$")
+1673: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:531:                || lowerUrl.contains("format=m3u8")
+1674: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:533:        boolean isDash = path.endsWith(".mpd")
+1675: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:534:                || lowerUrl.matches("(?s).*\\.mpd(?:[?#].*)?$")
+1676: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:535:                || lowerUrl.contains("format=mpd")
+1677: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:539:            return new HlsMediaSource.Factory(factory)
+1678: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:541:                    .createMediaSource(mediaItem);
+1679: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:545:            return new DashMediaSource.Factory(factory)
+1680: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:546:                    .createMediaSource(mediaItem);
+1681: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:549:        return new DefaultMediaSourceFactory(factory)
+1682: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:550:                .createMediaSource(mediaItem);
+1683: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:555:            ArrayList<MediaSource> sources = new ArrayList<>();
+1684: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:558:                sources.add(createMediaSource(item));
+1685: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:605:            MediaSource[] array = sources.toArray(new MediaSource[0]);
+1686: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:606:            ConcatenatingMediaSource playlist =
+1687: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:607:                    new ConcatenatingMediaSource(array);
+1688: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java:609:            player.setMediaSource(playlist);
+1692: -rw-------. 1 u0_a544 u0_a544 8.9M Nov  1 13:58 ./review-upload/extracted-source/dist/ISA-TV-HD.apk
+1693: -rw-------. 1 u0_a544 u0_a544 39M Nov  1 13:58 ./review-upload/extracted-source/release/ISA-TV-HD.apk
+1698: KAYNAK-TAM/app/src/main/java/com/isatvhd/player/MainActivity.java.64mb-yedek.txt
+1699: KAYNAK-TAM/app/src/main/java/com/isatvhd/player/MainActivity.java.onceki-yedek.txt
+1700: KAYNAK-TAM/app/src/main/java/com/isatvhd/player/MainActivity.java.txt
+1701: KAYNAK-TAM/app/src/main/java/com/isatvhd/player/PlayerActivity.java.txt
+1706: app/src/main/java/com/isatvhd/player/MainActivity.java
+1707: app/src/main/java/com/isatvhd/player/PlayerActivity.java
+1710: review-upload/extracted-source/app/build.gradle
+1711: review-upload/extracted-source/app/src/main/AndroidManifest.xml
+1712: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java
+1713: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/MainActivity.java
+1714: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/MainActivity.java.64mb-yedek
+1715: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/MainActivity.java.onceki-yedek
+1716: review-upload/extracted-source/app/src/main/java/com/isatvhd/player/PlayerActivity.java
+1717: review-upload/extracted-source/build.gradle
