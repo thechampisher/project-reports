@@ -1,0 +1,33 @@
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:theme="@style/AppTheme"
+        android:usesCleartextTraffic="true">
+
+        <activity
+            android:name=".PlayerActivity"
+            android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" />
+
+        <activity
+            android:name=".IsaflixPlayerActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".SplashActivity"
+            android:exported="true"
+            android:theme="@style/SplashTheme">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+        </activity>
+
+    </application>
+</manifest>
+
+
+RAPOR SONU
