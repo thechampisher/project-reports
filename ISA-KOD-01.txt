@@ -1,0 +1,41 @@
+    }
+}
+
+
+/*
+ * JSON nesnelerini düzleştirmeden korur.
+ * Dizi nesnesinin episodes/seasons yapısı kaybolmaz.
+ */
+
+function normalizeVOD(data,result=[]) {
+    if (Array.isArray(data)) {
+        data.forEach(item => normalizeVOD(item,result));
+        return result;
+    }
+
+    if (!data || typeof data !== 'object') return result;
+
+    const title = data.title || data.name || data.baslik ||
+                  data.titleName || data.filename || data.original_title;
+
+    const url = data.url || data.link || data.file ||
+                data.stream || data.playUrl || data.video ||
+                data.videoUrl || data.video_url || data.embedUrl || '';
+
+    const episodes = Array.isArray(data.episodes) ? data.episodes : [];
+    const seasons = Array.isArray(data.seasons) ? data.seasons : [];
+    const items = Array.isArray(data.items) ? data.items : [];
+
+    if (title && (url || episodes.length || seasons.length || items.length ||
+                  String(data.type || '').toLowerCase().includes('dizi') ||
+                  String(data.type || '').toLowerCase().includes('series'))) {
+        result.push({
+            type:String(data.type || '').toLowerCase(),
+            name:String(title),
+            title:String(title),
+            url:url,
+            videoUrl:data.videoUrl || data.video_url || '',
+            logo:data.poster || data.image || data.cover ||
+                 data.thumbnail || data.thumb || '',
+            poster:data.poster || data.image || data.cover ||
+                   data.thumbnail || '',

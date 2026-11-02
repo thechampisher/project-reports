@@ -1,0 +1,361 @@
+        const data = isaFlixCatalog();
+        const category = isaFlixCategory(item,'live');
+        const queue = isaFlixArray(data.live_channels)
+            .filter(x => isaFlixCategory(x,'live') === category)
+            .filter(x => /^https?:\/\//i.test(String(x.stream_url||'')))
+            .map(x => ({
+                name:x.name || 'Kanal',
+                url:x.stream_url,
+                logo:x.logo_url || x.image_url || x.poster_url || '',
+                group:category,
+                headers:isaFlixHeaders(x),
+                is_live:true
+            }));
+
+        const index = queue.findIndex(x => x.url === item.stream_url);
+        if (index >= 0) play(queue[index],queue,index,true);
+        else alert('Bu kanal için geçerli yayın bağlantısı bulunamadı.');
+        return;
+    }
+
+    if (mode === 'movies') {
+        const url = item.stream_url || item.page_url || item.url || '';
+        if (!/^https?:\/\//i.test(url)) {
+            alert('Bu film için geçerli bağlantı bulunamadı.');
+            return;
+        }
+        if (!item.stream_url && !isDirectMedia(url)) {
+            openIsaFlixVODItem({
+                name:item.title || item.name || 'Film',
+                title:item.title || item.name || 'Film',
+                url:url,
+                page_url:url,
+                poster:item.poster_url || item.image_url || '',
+                logo:item.poster_url || item.image_url || '',
+                headers:isaFlixHeaders(item),
+                queue:[],
+                queueIndex:0
+            });
+            return;
+        }
+
+        const queue = isaFlixArray(isaFlixState.items)
+            .filter(x => /^https?:\/\//i.test(String(x.stream_url || '')))
+            .map(x => ({
+                name:cleanMediaTitle(x.title || x.name || 'Film'),
+                url:x.stream_url,
+                logo:x.poster_url || x.image_url || '',
+                group:isaFlixCategory(x,'movies'),
+                headers:isaFlixHeaders(x),
+                season:0,
+                episode:0,
+                is_live:false
+            }));
+
+        let queueIndex = queue.findIndex(x =>
+            x.url === url &&
+            x.name === cleanMediaTitle(item.title || item.name || 'Film')
+        );
+        if (queueIndex < 0) {
+            queueIndex = queue.findIndex(x => x.url === url);
+        }
+
+        if (queueIndex < 0) {
+            alert('Film oynatma listesine eklenemedi.');
+            return;
+        }
+
+        openIsaFlixVODItem({
+            name:item.title || item.name || 'Film',
+            title:item.title || item.name || 'Film',
+            url,
+            videoUrl:url,
+            poster:item.poster_url || item.image_url || '',
+            logo:item.poster_url || item.image_url || '',
+            headers:isaFlixHeaders(item),
+            referer:item.referer || '',
+            queue:queue,
+            queueIndex:queueIndex
+        });
+        return;
+    }
+
+    isaFlixShowSeries(item);
+}
+
+async function isaFlixLoadWebSeries(series) {
+    if (series.__webEpisodesLoaded) return;
+    series.__webEpisodesLoaded = true;
+
+    if (!isHttp(series.page_url)) return;
+
+    const html = await nativeFetch(series.page_url);
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const base = new URL(series.page_url);
+    const episodes = [];
+    const seen = new Set();
+
+    for (const anchor of Array.from(doc.querySelectorAll('a[href]'))) {
+        try {
+            const page = new URL(anchor.getAttribute('href'), base.href);
+
+            if (!/^https?:$/.test(page.protocol) || page.origin !== base.origin)
+                continue;
+
+            const title = isaFlixNormalizeTitle(
+                anchor.getAttribute('title') ||
+                (anchor.querySelector('img') &&
+                 anchor.querySelector('img').getAttribute('alt')) ||
+                anchor.textContent
+            );
+
+            const hint = (page.pathname + ' ' + title).toLocaleLowerCase('tr');
+
+            if (!/bölüm|bolum|episode|part|s\d+e\d+|\d+x\d+|sezon|season/i.test(hint))
+                continue;
+
+            if (!title || seen.has(page.href)) continue;
+            seen.add(page.href);
+
+            const episode = {
+                title,
+                name: title,
+                page_url: page.href
+            };
+
+            episode.season_number = isaFlixExplicitSeasonNumber(episode);
+            episode.episode_number = isaFlixExplicitEpisodeNumber(episode);
+
+            episodes.push(episode);
+        } catch (e) {}
+    }
+
+    series.episodes = episodes;
+}
+
+function isaFlixExplicitSeasonNumber(item) {
+    const raw = item.season_number ?? item.season;
+
+    if (raw !== undefined && raw !== null &&
+        String(raw).trim() !== '' &&
+        Number.isFinite(Number(raw)) && Number(raw) > 0) {
+        return Number(raw);
+    }
+
+    const hint = [
+        item.title, item.name, item.page_url, item.url,
+        item.season
+    ].filter(Boolean).join(' ');
+
+    const patterns = [
+        /\bS0*(\d+)E0*\d+\b/i,
+        /\b0*(\d+)x0*\d+\b/i,
+        /\b(?:season|sezon)[\s._-]*0*(\d+)\b/i,
+        /\b0*(\d+)[\s._-]*(?:season|sezon)\b/i
+    ];
+
+    for (const pattern of patterns) {
+        const match = hint.match(pattern);
+        if (match) return Number(match[1]);
+    }
+
+    return 0;
+}
+
+function isaFlixExplicitEpisodeNumber(item) {
+    const raw = item.episode_number ?? item.episode ?? item.episode_num;
+
+    if (raw !== undefined && raw !== null &&
+        String(raw).trim() !== '' &&
+        Number.isFinite(Number(raw)) && Number(raw) > 0) {
+        return Number(raw);
+    }
+
+    const hint = [
+        item.title, item.name, item.page_url, item.url
+    ].filter(Boolean).join(' ');
+
+    const patterns = [
+        /\bS\d+E0*(\d+)\b/i,
+        /\b\d+x0*(\d+)\b/i,
+        /(?:bölüm|bolum|episode|ep)[\s._-]*0*(\d+)/i
+    ];
+
+    for (const pattern of patterns) {
+        const match = hint.match(pattern);
+        if (match) return Number(match[1]);
+    }
+
+    return 0;
+}
+
+
+function isaFlixShowSeries(series) {
+    const root = isaFlixRoot();
+    if (!root) return;
+
+    const episodes = isaFlixArray(series.episodes);
+
+    if (!episodes.length && series.page_url && !series.__webEpisodesLoaded) {
+        root.innerHTML = '<p class="isa-loading">Bütün bölümler yükleniyor...</p>';
+
+        isaFlixLoadWebSeries(series)
+            .then(() => isaFlixShowSeries(series))
+            .catch(error => {
+                console.warn('Bölümler yüklenemedi:', error);
+                series.__webEpisodesLoaded = true;
+                isaFlixShowSeries(series);
+            });
+        return;
+    }
+
+    const prepared = episodes.map((episode, index) => ({
+        ...episode,
+        __index: index,
+        __realSeason: isaFlixExplicitSeasonNumber(episode),
+        __realEpisode: isaFlixExplicitEpisodeNumber(episode)
+    }));
+
+    // Sezon kartları yok. Bölümler tek listede sıralanır.
+    prepared.sort((a, b) => {
+        const sa = a.__realSeason || 0;
+        const sb = b.__realSeason || 0;
+        if (sa !== sb) return sa - sb;
+
+        const ea = a.__realEpisode || 0;
+        const eb = b.__realEpisode || 0;
+        if (ea && eb && ea !== eb) return ea - eb;
+        if (ea && !eb) return -1;
+        if (!ea && eb) return 1;
+
+        return a.__index - b.__index;
+    });
+
+    if (!prepared.length) {
+        root.innerHTML = `
+            <div class="isaf-detail">
+                <button class="isa-back" id="isaf-back">← Dizilere dön</button>
+                <h2>${esc(series.title || series.name || 'Dizi')}</h2>
+                <p class="isa-vod-note">Bu dizide bölüm bulunamadı.</p>
+            </div>`;
+        document.getElementById('isaf-back').onclick = () => isaFlixRender();
+        return;
+    }
+
+    isaFlixShowEpisodes(series, 0, prepared);
+}
+
+
+function isaFlixShowEpisodes(series, number, episodes) {
+    const root = isaFlixRoot();
+    if (!root) return;
+
+    const sortedEpisodes = [...episodes].sort((a, b) => {
+        const sa = isaFlixExplicitSeasonNumber(a) || 0;
+        const sb = isaFlixExplicitSeasonNumber(b) || 0;
+        if (sa !== sb) return sa - sb;
+
+        const an = isaFlixExplicitEpisodeNumber(a);
+        const bn = isaFlixExplicitEpisodeNumber(b);
+        if (an && bn && an !== bn) return an - bn;
+        if (an && !bn) return -1;
+        if (!an && bn) return 1;
+
+        return Number(a.__index || 0) - Number(b.__index || 0);
+    });
+
+    const seriesTitle = series.title || series.name || 'Dizi';
+
+    root.innerHTML = `
+        <div class="isaf-detail">
+            <button class="isa-back" id="isaf-season-back">
+                <i class="fas fa-arrow-left"></i> Dizilere dön
+            </button>
+            <h2>${esc(seriesTitle)}</h2>
+            <div class="isaf-season-grid">
+                ${sortedEpisodes.map((episode, index) => {
+                    const label = (index + 1) + '. Bölüm';
+
+                    return `
+                        <button class="isaf-season" data-isaf-episode="${index}">
+                            <i class="fas fa-circle-play"></i>
+                            <strong>${esc(label)}</strong>
+                        </button>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+    `;
+
+    document.getElementById('isaf-season-back').onclick = () => {
+        isaFlixState.mode = 'series';
+        isaFlixRender();
+    };
+
+    root.querySelectorAll('[data-isaf-episode]').forEach(button => {
+        button.onclick = () => {
+            const episode = sortedEpisodes[Number(button.dataset.isafEpisode)];
+            const url = episode.stream_url || '';
+
+            const seasonNumber =
+                isaFlixExplicitSeasonNumber(episode) ||
+                (Number(number) > 0 ? Number(number) : 0);
+
+            const episodeNumber = isaFlixExplicitEpisodeNumber(episode);
+
+            if (!/^https?:\/\//i.test(url) && isHttp(episode.page_url)) {
+                const note = document.createElement('p');
+                note.className = 'isa-vod-note';
+                note.textContent = 'Video hazırlanıyor...';
+                root.prepend(note);
+
+                resolveStaticMedia(episode.page_url)
+                    .then(resolved => {
+                        note.remove();
+                        const playbackUrl = resolved || episode.page_url;
+
+                        const showName = cleanMediaTitle(seriesTitle);
+                        const entry = {
+                            name: showName,
+                            url: playbackUrl,
+                            headers: {Referer: episode.page_url},
+                            season: seasonNumber,
+                            episode: episodeNumber,
+                            is_live: false,
+                            is_series: true,
+                            series_id: series.id || series.series_id || series.page_url,
+                            series_name: showName,
+                            series_url: series.page_url || ''
+                        };
+
+                        playIsaFlix(showName, playbackUrl, entry.headers, [entry], 0);
+                    })
+                    .catch(error => {
+                        note.remove();
+                        console.warn('Bölüm bağlantısı:', error);
+
+                        const showName = cleanMediaTitle(seriesTitle);
+                        const entry = {
+                            name: showName,
+                            url: episode.page_url,
+                            headers: {Referer: episode.page_url},
+                            season: seasonNumber,
+                            episode: episodeNumber,
+                            is_live: false,
+                            is_series: true,
+                            series_id: series.id || series.series_id || series.page_url,
+                            series_name: showName,
+                            series_url: series.page_url || ''
+                        };
+
+                        playIsaFlix(
+                            showName,
+                            episode.page_url,
+                            entry.headers,
+                            [entry],
+                            0
+                        );
+                    });
+
+                return;
+            }
