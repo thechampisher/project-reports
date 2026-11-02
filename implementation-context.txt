@@ -1,0 +1,2426 @@
+
+
+=================================================================
+JAVA KOD BOLUMLERI
+=================================================================
+
+--- Satir 160-185 ---
+160:                 "https://video.twimg.com/amplify_video/2116995097560489984/vid/avc1/0/0/1280x720/J0B3W7wIfz84R4d_.mp4"
+161:             };
+162: 
+163:             new android.app.AlertDialog.Builder(MainActivity.this)
+164:                     .setTitle("İSA TV HD - URL TEST")
+165:                     .setItems(names, (dialog, index) -> {
+166:                         Intent intent = new Intent(
+167:                                 MainActivity.this,
+168:                                 IsaflixPlayerActivity.class);
+169:                         intent.putExtra("stream_url", urls[index]);
+170:                         intent.putExtra("channel_name", names[index]);
+171:                         intent.putExtra("headers_json", "{}");
+172:                         startActivity(intent);
+173:                     })
+174:                     .setNegativeButton("Kapat", null)
+175:                     .show();
+176:         });
+177:     }
+178: 
+179:     private void createTvLogo() {
+180:         if (!shouldShowTvLogo()) return;
+181: 
+182:         try {
+183:             tvLogo = new ImageView(this);
+184: 
+185:             try (java.io.InputStream input =
+
+--- Satir 284-311 ---
+284: } catch (Exception e) {
+285:     android.util.Log.e("ISATV", "Kanal kuyruğu aktarılamadı", e);
+286: }
+287: 
+288:             });
+289:         }
+290: 
+291: 
+292:         // ISAFLIX_QUEUE_V2
+293:         @JavascriptInterface
+294:         public void playIsaflix(
+295:                 String name,
+296:                 String url,
+297:                 String headersJson,
+298:                 String queueJson,
+299:                 int selectedIndex) {
+300: 
+301:             runOnUiThread(() -> {
+302:                 int targetIndex = selectedIndex;
+303: 
+304:                 if (url == null ||
+305:                         !url.matches("(?i)^https?://.*")) {
+306:                     return;
+307:                 }
+308: 
+309:                 try {
+310:                     org.json.JSONArray queue = new org.json.JSONArray(
+311:                             queueJson == null ? "[]" : queueJson
+
+--- Satir 320-358 ---
+320:                         ));
+321:                         one.put("is_live", false);
+322:                         queue.put(one);
+323:                         targetIndex = 0;
+324:                     }
+325: 
+326:                     java.io.File queueFile = new java.io.File(
+327:                             getCacheDir(),
+328:                             "isaflix-player-queue.json"
+329:                     );
+330: 
+331:                     try (java.io.FileOutputStream output =
+332:                                  new java.io.FileOutputStream(queueFile, false)) {
+333:                         output.write(queue.toString().getBytes(
+334:                                 java.nio.charset.StandardCharsets.UTF_8
+335:                         ));
+336:                         output.flush();
+337:                     }
+338: 
+339:                     Intent intent = new Intent(
+340:                             MainActivity.this,
+341:                             IsaflixPlayerActivity.class
+342:                     );
+343:                     intent.putExtra("stream_url", url);
+344:                     intent.putExtra(
+345:                             "channel_name",
+346:                             name == null ? "İSAFLIX" : name
+347:                     );
+348:                     intent.putExtra(
+349:                             "headers_json",
+350:                             headersJson == null ? "{}" : headersJson
+351:                     );
+352:                     intent.putExtra("queue_file", queueFile.getAbsolutePath());
+353:                     intent.putExtra("selected_index", targetIndex);
+354:                     startActivity(intent);
+355: 
+356:                 } catch (Exception e) {
+357:                     Log.e(TAG, "İSAFLIX kuyruğu aktarılamadı", e);
+358:                     Toast.makeText(
+
+--- Satir 395-444 ---
+395: 
+396:                 prefs.edit().putString("favorites", updated.toString()).apply();
+397:             } catch (Exception e) {
+398:                 Log.e(TAG, "Favori kaydedilemedi", e);
+399:             }
+400:         }
+401: 
+402: 
+403:         private void reportCatalogProgress(
+404:             String callbackId, String stage, int percent
+405:         ) {
+406:             final String id = callbackId == null
+407:                 ? "0" : callbackId.replaceAll("[^0-9]", "");
+408:             final int value = Math.max(0, Math.min(100, percent));
+409: 
+410:             runOnUiThread(() -> {
+411:                 if (webView == null) return;
+412:                 webView.evaluateJavascript(
+413:                     "if(window.__isaCatalogProgress)window.__isaCatalogProgress(" +
+414:                     JSONObject.quote(id) + "," +
+415:                     JSONObject.quote(stage) + "," + value + ");",
+416:                     null
+417:                 );
+418:             });
+419:         }
+420: 
+421:         @JavascriptInterface
+422:         public String readCatalogChunk(String offsetText, int requestedBytes) {
+423:             try {
+424:                 long offset = Long.parseLong(offsetText);
+425: 
+426:                 java.io.File file = new java.io.File(
+427:                     getCacheDir(), "isaflix-web-katalog.json"
+428:                 );
+429: 
+430:                 if (!file.isFile() || offset < 0 ||
+431:                     offset >= file.length()) {
+432:                     return "";
+433:                 }
+434: 
+435:                 int size = Math.max(1024,
+436:                     Math.min(65536, requestedBytes));
+437: 
+438:                 int count = (int)Math.min(
+439:                     (long) size, file.length() - offset
+440:                 );
+441: 
+442:                 byte[] buffer = new byte[count];
+443: 
+444:                 try (java.io.RandomAccessFile input =
+
+--- Satir 448-642 ---
+448:                 }
+449: 
+450:                 return android.util.Base64.encodeToString(
+451:                     buffer,
+452:                     android.util.Base64.NO_WRAP
+453:                 );
+454: 
+455:             } catch (Exception e) {
+456:                 Log.e(TAG, "Catalog parça okuma hatası", e);
+457:                 return "";
+458:             }
+459:         }
+460: 
+461: 
+462:         @JavascriptInterface
+463:         public void loadCachedCatalogCatalog(String callbackId) {
+464:             final String id = callbackId == null
+465:                 ? "0" : callbackId.replaceAll("[^0-9]", "");
+466: 
+467:             java.io.File cache = new java.io.File(
+468:                 getCacheDir(), "isaflix-web-katalog.json"
+469:             );
+470: 
+471:             final boolean exists =
+472:                 cache.isFile() && cache.length() > 0;
+473: 
+474:             final long size = exists ? cache.length() : 0L;
+475: 
+476:             runOnUiThread(() -> {
+477:                 if (webView == null) return;
+478: 
+479:                 if (exists) {
+480:                     webView.evaluateJavascript(
+481:                         "window.__isaCatalogReady(" +
+482:                         JSONObject.quote(id) + "," +
+483:                         size + ",null,false);",
+484:                         null
+485:                     );
+486:                 } else {
+487:                     webView.evaluateJavascript(
+488:                         "window.__isaCatalogDone(" +
+489:                         JSONObject.quote(id) +
+490:                         ",null,'CACHE_EMPTY');",
+491:                         null
+492:                     );
+493:                 }
+494:             });
+495:         }
+496: 
+497:         @JavascriptInterface
+498:         public void fetchCatalogCatalog(String callbackId) {
+499:             networkExecutor.execute(() -> {
+500:                 String error = null;
+501:                 boolean notModified = false;
+502: 
+503:                 HttpURLConnection connection = null;
+504: 
+505:                 try {
+506:                     java.io.File cache = new java.io.File(
+507:                         getCacheDir(), "isaflix-web-katalog.json"
+508:                     );
+509: 
+510:                     android.content.SharedPreferences prefs =
+511:                         getSharedPreferences("isaflix_web_catalog", MODE_PRIVATE);
+512: 
+513:                     String etag = prefs.getString("etag", "");
+514:                     String modified = prefs.getString("modified", "");
+515: 
+516:                     URL url = new URL(
+517:                         "https://raw.githubusercontent.com/thechampisher/ISA-TV-HD/main/INCELEME/isaflix-web-katalog.json"
+518:                     );
+519: 
+520:                     connection = (HttpURLConnection) url.openConnection();
+521:                     connection.setConnectTimeout(20000);
+522:                     connection.setReadTimeout(180000);
+523:                     connection.setRequestMethod("GET");
+524:                     connection.setInstanceFollowRedirects(true);
+525:                     connection.setRequestProperty("Accept-Encoding", "identity");
+526:                     connection.setRequestProperty("User-Agent", "ISA-TV-HD/1.0");
+527: 
+528:                     if (!etag.isEmpty())
+529:                         connection.setRequestProperty("If-None-Match", etag);
+530: 
+531:                     if (!modified.isEmpty())
+532:                         connection.setRequestProperty("If-Modified-Since", modified);
+533: 
+534:                     int status = connection.getResponseCode();
+535: 
+536:                     if (status == 304 && cache.isFile() && cache.length() > 0) {
+537:                         notModified = true;
+538:                     } else if (status >= 200 && status < 300) {
+539:                         java.io.File encrypted = new java.io.File(
+540:                             getCacheDir(), "catalog-catalog.download"
+541:                         );
+542: 
+543:                         long totalBytes = connection.getContentLengthLong();
+544:                         long downloaded = 0;
+545:                         int lastPercent = -1;
+546:                         long lastReport = 0;
+547: 
+548:                         reportCatalogProgress(callbackId, "download", 0);
+549: 
+550:                         try (
+551:                             java.io.InputStream in = connection.getInputStream();
+552:                             java.io.FileOutputStream out =
+553:                                 new java.io.FileOutputStream(encrypted)
+554:                         ) {
+555:                             byte[] buffer = new byte[65536];
+556:                             int n;
+557: 
+558:                             while ((n = in.read(buffer)) != -1) {
+559:                                 out.write(buffer, 0, n);
+560:                                 downloaded += n;
+561: 
+562:                                 int percent = totalBytes > 0
+563:     ? (int)Math.min(70, downloaded * 70L / totalBytes)
+564:     : 0;
+565: 
+566:                                 long now = android.os.SystemClock.elapsedRealtime();
+567: 
+568:                                 if (percent != lastPercent &&
+569:                                     (now - lastReport >= 150 || percent == 100)) {
+570:                                     reportCatalogProgress(
+571:                                         callbackId, "download", percent
+572:                                     );
+573:                                     lastPercent = percent;
+574:                                     lastReport = now;
+575:                                 }
+576:                             }
+577: 
+578:                             out.getFD().sync();
+579:                         }
+580: 
+581:                         reportCatalogProgress(callbackId, "load", 70);
+582: 
+583:                         decryptCatalogFile(encrypted, cache, callbackId);
+584:                         encrypted.delete();
+585: 
+586:                         String newEtag = connection.getHeaderField("ETag");
+587:                         String newModified = connection.getHeaderField("Last-Modified");
+588: 
+589:                         android.content.SharedPreferences.Editor edit = prefs.edit();
+590:                         if (newEtag != null) edit.putString("etag", newEtag);
+591:                         if (newModified != null) edit.putString("modified", newModified);
+592:                         edit.apply();
+593: 
+594:                     } else {
+595:                         throw new java.io.IOException("Catalog HTTP " + status);
+596:                     }
+597: 
+598:                 } catch (Exception ex) {
+599:                     error = ex.getMessage() == null
+600:                         ? "Catalog kataloğu alınamadı." : ex.getMessage();
+601: 
+602:                     Log.e(TAG, "Catalog katalog hatası", ex);
+603:                 } finally {
+604:                     if (connection != null) connection.disconnect();
+605:                 }
+606: 
+607:                 final String failure = error;
+608:                 final boolean finalNotModified = notModified;
+609:                 final String id = callbackId == null
+610:                     ? "0" : callbackId.replaceAll("[^0-9]", "");
+611: 
+612:                 final java.io.File catalogFile = new java.io.File(
+613:                     getCacheDir(), "isaflix-web-katalog.json"
+614:                 );
+615: 
+616:                 final long catalogSize =
+617:                     failure == null && catalogFile.isFile()
+618:                     ? catalogFile.length() : 0L;
+619: 
+620:                 runOnUiThread(() -> {
+621:                     if (webView == null) return;
+622: 
+623:                     webView.evaluateJavascript(
+624:                         "window.__isaCatalogReady(" + id + "," +
+625:                         catalogSize + "," +
+626:                         JSONObject.quote(failure) + "," +
+627:                         (finalNotModified ? "true" : "false") + ");",
+628:                         null
+629:                     );
+630:                 });
+631:             });
+632:         }
+633: 
+634:         private String readUtf8File(java.io.File file) throws Exception {
+635:             StringBuilder result = new StringBuilder();
+636:             try (
+637:                 java.io.BufferedReader reader = new java.io.BufferedReader(
+638:                     new java.io.InputStreamReader(
+639:                         new java.io.FileInputStream(file),
+640:                         StandardCharsets.UTF_8
+641:                     ), 65536
+642:                 )
+
+--- Satir 645-670 ---
+645:                 int n;
+646:                 while ((n = reader.read(buffer)) != -1) {
+647:                     result.append(buffer, 0, n);
+648:                 }
+649:             }
+650:             return result.toString();
+651:         }
+652: 
+653:         private void decryptCatalogFile(
+654:             java.io.File source,
+655:             java.io.File destination,
+656:             String callbackId
+657:         ) throws Exception {
+658: 
+659:             try (
+660:                 java.io.BufferedInputStream input =
+661:                     new java.io.BufferedInputStream(
+662:                         new java.io.FileInputStream(source), 65536
+663:                     )
+664:             ) {
+665:                 byte[] header = new byte[4];
+666:                 int count = 0;
+667:                 while (count < 4) {
+668:                     int n = input.read(header, count, 4-count);
+669:                     if (n < 0) throw new java.io.IOException("Dosya eksik.");
+670:                     count += n;
+
+--- Satir 717-742 ---
+717:                                 int percent = (int)Math.min(
+718:                                     90L, 70L + consumed * 20L / cipherTotal
+719:                                 );
+720: 
+721:                                 long now = android.os.SystemClock.elapsedRealtime();
+722: 
+723:                                 if (percent != lastPercent &&
+724:                                     (now - lastReport >= 150 || percent == 99)) {
+725:                                     reportCatalogProgress(
+726:                                         callbackId, "load", percent
+727:                                     );
+728:                                     lastPercent = percent;
+729:                                     lastReport = now;
+730:                                 }
+731:                             }
+732: 
+733:                             @Override
+734:                             public int read(byte[] b, int off, int len)
+735:                                 throws java.io.IOException {
+736:                                 int n = super.read(b, off, len);
+737:                                 if (n > 0) updateProgress(n);
+738:                                 return n;
+739:                             }
+740: 
+741:                             @Override
+742:                             public int read() throws java.io.IOException {
+
+--- Satir 771-796 ---
+771: 
+772:                     while ((n = decoded.read(buffer)) != -1) {
+773:                         output.write(buffer, 0, n);
+774:                     }
+775: 
+776:                     output.flush();
+777:                 }
+778: 
+779:                 reportCatalogProgress(callbackId, "load", 90);
+780: 
+781:                 if (!temp.renameTo(destination)) {
+782:                     try (
+783:                         java.io.InputStream in = new java.io.FileInputStream(temp);
+784:                         java.io.OutputStream out =
+785:                             new java.io.FileOutputStream(destination)
+786:                     ) {
+787:                         byte[] buffer = new byte[65536];
+788:                         int n;
+789:                         while ((n = in.read(buffer)) != -1)
+790:                             out.write(buffer, 0, n);
+791:                     }
+792:                     temp.delete();
+793:                 }
+794:             }
+795:         }
+796: 
+
+=================================================================
+JAVASCRIPT KOD BOLUMLERI
+=================================================================
+
+--- Satir 32-172 ---
+32:     if (error) cb.reject(new Error(error));
+33:     else cb.resolve(value);
+34: };
+35: 
+36: 
+37: let catalogRequestId = 0;
+38: let catalogTimerStarted = false;
+39: let catalogLastData = null;
+40: let catalogHasCache = false;
+41: let catalogLoading = false;
+42: let catalogInFlight = null;
+43: 
+44: window.__isaCatalogCallbacks = {};
+45: 
+46: 
+47: 
+48: function isaCatalogProgressElement() {
+49:     let element = document.getElementById(
+50:         'isa-catalog-progress-overlay'
+51:     );
+52: 
+53:     if (!element) {
+54:         element = document.createElement('div');
+55:         element.id = 'isa-catalog-progress-overlay';
+56:         element.style.cssText =
+57:             'position:fixed;left:0;right:0;top:0;' +
+58:             'height:3px;z-index:999999;' +
+59:             'pointer-events:none;background:transparent;';
+60: 
+61:         element.innerHTML =
+62:             '<div id="isa-catalog-fill" style="' +
+63:             'height:3px;width:0;background:#16b978;' +
+64:             'transition:width .12s linear"></div>' +
+65:             '<div id="isa-catalog-percent" style="' +
+66:             'position:absolute;right:8px;top:5px;' +
+67:             'font-size:10px;color:#16b978;' +
+68:             'background:rgba(0,0,0,.65);' +
+69:             'padding:2px 5px;border-radius:4px">0%</div>';
+70: 
+71:         document.body.appendChild(element);
+72:     }
+73: 
+74:     return element;
+75: }
+76: 
+77: function isaCatalogHideProgress() {
+78:     const element = document.getElementById(
+79:         'isa-catalog-progress-overlay'
+80:     );
+81: 
+82:     if (element) element.remove();
+83: }
+84: 
+85: window.__isaCatalogProgress = function(id, stage, percent) {
+86:     if (catalogHasCache) return;
+87: 
+88:     const root = isaCatalogProgressElement();
+89:     const value = Math.max(
+90:         0, Math.min(100, Number(percent) || 0)
+91:     );
+92: 
+93:     root.querySelector('#isa-catalog-fill').style.width =
+94:         value + '%';
+95: 
+96:     root.querySelector('#isa-catalog-percent').textContent =
+97:         value + '%';
+98: };
+99: 
+100: window.__isaCatalogDone = function(id, value, error) {
+101:     const callback = window.__isaCatalogCallbacks[id];
+102:     if (!callback) return;
+103: 
+104:     delete window.__isaCatalogCallbacks[id];
+105: 
+106:     if (error) {
+107:         isaCatalogHideProgress();
+108:         callback.reject(new Error(error));
+109:     } else {
+110:         callback.resolve(value);
+111:     }
+112: };
+113: 
+114: window.__isaCatalogReady = function(id, totalBytes, error, notModified) {
+115:     if (error) {
+116:         window.__isaCatalogDone(id, null, error);
+117:         return;
+118:     }
+119: 
+120:     const callback = window.__isaCatalogCallbacks[id];
+121: 
+122:     if (!callback) return;
+123: 
+124:     if (notModified && catalogLastData &&
+125:         typeof catalogLastData === 'object') {
+126:         window.__isaCatalogDone(id, catalogLastData, null);
+127:         return;
+128:     }
+129: 
+130:     if (!window.ISATV ||
+131:         typeof window.ISATV.readCatalogChunk !== 'function') {
+132:         window.__isaCatalogDone(
+133:             id, null, 'Java Catalog parça bağlantısı bulunamadı.'
+134:         );
+135:         return;
+136:     }
+137: 
+138:     if (!Number.isFinite(totalBytes) || totalBytes <= 0) {
+139:         window.__isaCatalogDone(
+140:             id, null, 'Catalog kataloğu boş.'
+141:         );
+142:         return;
+143:     }
+144: 
+145:     let offset = 0;
+146:     const chunkSize = 65536;
+147:     let completeText = '';
+148:     const decoder = new TextDecoder('utf-8');
+149: 
+150:     function readNext() {
+151:         try {
+152:             const encoded = window.ISATV.readCatalogChunk(
+153:                 String(offset), chunkSize
+154:             );
+155: 
+156:             if (!encoded) {
+157:                 throw new Error('Catalog veri parçası boş geldi.');
+158:             }
+159: 
+160:             const binary = atob(encoded);
+161:             const bytes = new Uint8Array(binary.length);
+162: 
+163:             for (let i = 0; i < binary.length; i++) {
+164:                 bytes[i] = binary.charCodeAt(i);
+165:             }
+166: 
+167:             offset += bytes.length;
+168: 
+169:             completeText += decoder.decode(
+170:                 bytes,
+171:                 {stream: offset < totalBytes}
+172:             );
+
+--- Satir 174-374 ---
+174:             const percent = Math.min(
+175:                 99,
+176:                 90 + Math.floor(offset * 9 / totalBytes)
+177:             );
+178: 
+179:             window.__isaCatalogProgress(id, 'load', percent);
+180: 
+181:             if (offset < totalBytes) {
+182:                 setTimeout(readNext, 0);
+183:                 return;
+184:             }
+185: 
+186:             completeText += decoder.decode();
+187: 
+188:             window.__isaCatalogDone(
+189:                 id, completeText, null
+190:             );
+191: 
+192:         } catch (e) {
+193:             completeText = '';
+194: 
+195:             window.__isaCatalogDone(
+196:                 id, null,
+197:                 'Catalog aktarım hatası: ' + e.message
+198:             );
+199:         }
+200:     }
+201: 
+202:     readNext();
+203: };
+204: 
+205: 
+206: function loadCachedCatalogCatalog() {
+207:     if (!window.ISATV ||
+208:         typeof window.ISATV.loadCachedCatalogCatalog !== 'function') {
+209:         return Promise.resolve(null);
+210:     }
+211: 
+212:     catalogHasCache = true;
+213: 
+214:     return new Promise(resolve => {
+215:         const id = ++catalogRequestId;
+216: 
+217:         window.__isaCatalogCallbacks[id] = {
+218:             resolve: value => {
+219:                 try {
+220:                     const parsed =
+221:                         (value && typeof value === 'object')
+222:                         ? value : JSON.parse(value);
+223: 
+224:                     if (!parsed || typeof parsed !== 'object') {
+225:                         throw new Error('Gecersiz veri');
+226:                     }
+227: 
+228:                     catalogLastData = parsed;
+229:                     window.ISA_Catalog_CATALOG = parsed;
+230:                     catalogHasCache = true;
+231:                     resolve(parsed);
+232: 
+233:                 } catch (e) {
+234:                     catalogHasCache = false;
+235:                     resolve(null);
+236:                 }
+237:             },
+238: 
+239:             reject: () => {
+240:                 catalogHasCache = false;
+241:                 resolve(null);
+242:             }
+243:         };
+244: 
+245:         try {
+246:             window.ISATV.loadCachedCatalogCatalog(String(id));
+247:         } catch (e) {
+248:             delete window.__isaCatalogCallbacks[id];
+249:             catalogHasCache = false;
+250:             resolve(null);
+251:         }
+252:     });
+253: }
+254: 
+255: function fetchCatalogCatalog() {
+256:     if (catalogInFlight) return catalogInFlight;
+257: 
+258:     if (!window.ISATV || !window.ISATV.fetchCatalogCatalog) {
+259:         return Promise.reject(
+260:             new Error('Catalog native bağlantısı kullanılamıyor.')
+261:         );
+262:     }
+263: 
+264:     catalogLoading = true;
+265: 
+266:     catalogInFlight = new Promise((resolve, reject) => {
+267:         const id = ++catalogRequestId;
+268: 
+269:         window.__isaCatalogCallbacks[id] = {
+270:             resolve: value => {
+271:                 try {
+272:                     const parsed = (value && typeof value === 'object')
+273:                         ? value : JSON.parse(value);
+274:                     if (!parsed || typeof parsed !== 'object') {
+275:                         throw new Error('Boş veya geçersiz katalog.');
+276:                     }
+277:                     catalogLastData = parsed;
+278:                     window.__isaCatalogProgress(id, "parse", 100);
+279:                     setTimeout(isaCatalogHideProgress, 180);
+280:                     catalogHasCache = true;
+281:                     resolve(parsed);
+282:                 } catch (e) {
+283:                     reject(new Error('Catalog JSON doğrulaması başarısız: ' + e.message));
+284:                 } finally {
+285:                     catalogLoading = false;
+286:                     catalogInFlight = null;
+287:                 }
+288:             },
+289:             reject: error => {
+290:                 catalogLoading = false;
+291:                 catalogInFlight = null;
+292:                 reject(error);
+293:             }
+294:         };
+295: 
+296:         try {
+297:             window.ISATV.fetchCatalogCatalog(String(id));
+298:         } catch (e) {
+299:             delete window.__isaCatalogCallbacks[id];
+300:             catalogLoading = false;
+301:             catalogInFlight = null;
+302:             reject(e);
+303:         }
+304:     });
+305: 
+306:     return catalogInFlight;
+307: }
+308: 
+309: async function refreshCatalogCatalog(silent=false) {
+310:     try {
+311:         const previousData = catalogLastData;
+312:         const data = await fetchCatalogCatalog();
+313: 
+314:         if (data === previousData) return data;
+315: 
+316:         window.ISA_Catalog_CATALOG = data;
+317:         window.dispatchEvent(new CustomEvent(
+318:             'isa:catalog-catalog-updated',
+319:             {detail:data}
+320:         ));
+321: 
+322:         if (!silent) {
+323:             const status = document.getElementById('isa-live-status');
+324:             if (status) status.textContent = 'Catalog kataloğu güncellendi.';
+325:         }
+326: 
+327:         return data;
+328:     } catch (error) {
+329:         console.error('Catalog katalog güncellemesi:', error);
+330: 
+331:         if (!silent) {
+332:             const status = document.getElementById('isa-live-status');
+333:             if (status) status.textContent =
+334:                 'Catalog güncellenemedi: ' + error.message;
+335:         }
+336: 
+337:         return catalogLastData;
+338:     }
+339: }
+340: 
+341: 
+342: function startCatalogAutoUpdate() {
+343:     if (catalogTimerStarted) return;
+344:     catalogTimerStarted = true;
+345: 
+346:     loadCachedCatalogCatalog().then(cached => {
+347:         if (cached) {
+348:             window.dispatchEvent(new CustomEvent(
+349:                 'isa:catalog-catalog-updated',
+350:                 {detail: cached}
+351:             ));
+352:         }
+353: 
+354:         refreshCatalogCatalog(true);
+355:     });
+356: 
+357:     window.setInterval(() => {
+358:         if (document.visibilityState === 'visible') {
+359:             refreshCatalogCatalog(true);
+360:         }
+361:     }, 60000);
+362: }
+363: 
+364: function nativeCacheGet(key) {
+365:     if (!window.ISATV || !window.ISATV.cacheGet) {
+366:         try {
+367:             return Promise.resolve(localStorage.getItem('isa-cache:'+key));
+368:         } catch(e) {
+369:             return Promise.resolve(null);
+370:         }
+371:     }
+372: 
+373:     return new Promise((resolve,reject) => {
+374:         const id = ++cacheCounter;
+
+--- Satir 385-447 ---
+385:             localStorage.setItem('isa-cache:'+key,value);
+386:         } catch(e) {}
+387:     }
+388: }
+389: 
+390: function nativeFetch(url) {
+391:     if (!window.ISATV || !window.ISATV.fetchText) {
+392:         return fetch(url).then(response => {
+393:             if (!response.ok) throw new Error('HTTP ' + response.status);
+394:             return response.text();
+395:         });
+396:     }
+397:     return new Promise((resolve,reject) => {
+398:         const id = ++fetchCounter;
+399:         window.__isaFetchCallbacks[id] = {resolve,reject};
+400:         window.ISATV.fetchText(url,String(id));
+401:     });
+402: }
+403: 
+404: function nativeFetchWithHeaders(url,headers={}) {
+405:     if (!window.ISATV || !window.ISATV.fetchTextWithHeaders) {
+406:         return fetch(url,{headers}).then(response => {
+407:             if (!response.ok) throw new Error('HTTP ' + response.status);
+408:             return response.text();
+409:         });
+410:     }
+411:     return new Promise((resolve,reject) => {
+412:         const id = ++fetchCounter;
+413:         window.__isaFetchCallbacks[id] = {resolve,reject};
+414:         window.ISATV.fetchTextWithHeaders(url,JSON.stringify(headers || {}),String(id));
+415:     });
+416: }
+417: 
+418: function getTextWithHeaders(url,headers={}) {
+419:     return nativeFetchWithHeaders(url,headers);
+420: }
+421: 
+422: async function getText(url,forceRefresh=false) {
+423:     let cached = null;
+424: 
+425:     try {
+426:         cached = await nativeCacheGet(url);
+427:     } catch(e) {}
+428: 
+429:     if (!forceRefresh && cached) return cached;
+430: 
+431:     try {
+432:         const fresh = await nativeFetch(url);
+433:         nativeCachePut(url,fresh);
+434:         return fresh;
+435:     } catch(e) {
+436:         if (cached) return cached;
+437:         throw e;
+438:     }
+439: }
+440: 
+441: function esc(value) {
+442:     return String(value == null ? '' : value).replace(/[&<>"']/g,c => ({
+443:         '&':'&amp;',
+444:         '<':'&lt;',
+445:         '>':'&gt;',
+446:         '"':'&quot;',
+447:         "'":'&#39;'
+
+--- Satir 602-623 ---
+602: 
+603:     location.href = './player.html?'+query.toString();
+604: }
+605: 
+606: 
+607: /* ISAFLIX_QUEUE_V2 */
+608: function playIsaFlix(name, url, headers={}, queue=[], index=0) {
+609:     if (!isHttp(url)) {
+610:         alert('Geçerli video bağlantısı bulunamadı.');
+611:         return;
+612:     }
+613: 
+614:     const list = Array.isArray(queue) && queue.length
+615:         ? queue
+616:         : [{
+617:             name:name || 'İSAFLIX',
+618:             url:url,
+619:             headers:headers || {},
+620:             season:0,
+621:             episode:0,
+622:             is_live:false
+623:         }];
+
+--- Satir 627-648 ---
+627:         selected = list.findIndex(x => x.url === url);
+628:     }
+629:     if (selected < 0) selected = 0;
+630: 
+631:     if (window.ISATV &&
+632:         typeof window.ISATV.playIsaflix === 'function') {
+633:         window.ISATV.playIsaflix(
+634:             cleanMediaTitle(name || 'İSAFLIX'),
+635:             url,
+636:             JSON.stringify(headers || {}),
+637:             JSON.stringify(list),
+638:             selected
+639:         );
+640:         return;
+641:     }
+642: 
+643:     play({
+644:         name:name || 'İSAFLIX',
+645:         url:url,
+646:         logo:'',
+647:         group:'İSAFLIX',
+648:         headers:headers || {}
+
+--- Satir 1397-1417 ---
+1397:                 button.addEventListener('click', () => {
+1398:                     if (kind === 'series') {
+1399:                         if (provider.type === 'xtream' && item.xtream)
+1400:                             openXtreamSeries(item,provider);
+1401:                         else
+1402:                             showSeries(item,provider);
+1403:                     } else {
+1404:                         openVODItem(item);
+1405:                     }
+1406:                 });
+1407: 
+1408:                 fragment.appendChild(button);
+1409:             }
+1410: 
+1411:             grid.appendChild(fragment);
+1412: 
+1413:             if (offset < entries.length) {
+1414:                 requestAnimationFrame(next);
+1415:             }
+1416:         };
+1417: 
+
+--- Satir 1583-1603 ---
+1583: 
+1584:         document.getElementById('isa-xtream-series-back').onclick =
+1585:             () => openVODProvider(provider);
+1586: 
+1587:         area.querySelectorAll('[data-xseason]').forEach(button => {
+1588:             button.onclick = () => showEpisodes(
+1589:                 grouped.get(seasonNumbers[
+1590:                     Number(button.dataset.xseason)
+1591:                 ]),
+1592:                 series,
+1593:                 provider
+1594:             );
+1595:         });
+1596: 
+1597:         if (!seasonNumbers.length) {
+1598:             area.innerHTML +=
+1599:                 '<p class="isa-vod-note">Bu dizide bölüm bulunamadı.</p>';
+1600:         }
+1601: 
+1602:     } catch(error) {
+1603:         area.innerHTML =
+
+--- Satir 1628-1648 ---
+1628:     return 1;
+1629: }
+1630: 
+1631: 
+1632: 
+1633: function showSeries(series,provider) {
+1634:     const area = document.getElementById('isa-vod-items');
+1635:     let episodes = series.episodes || [];
+1636:     const seasons = series.seasons || [];
+1637: 
+1638:     if (seasons.length) {
+1639:         const grouped = seasons.map((season,index) => ({
+1640:             number:season.number||season.season||index+1,
+1641:             episodes:season.episodes||[]
+1642:         }));
+1643: 
+1644:         area.innerHTML = `
+1645:             <div class="isa-vod-toolbar">
+1646:                 <button class="isa-back" id="isa-series-back"><i class="fas fa-arrow-left"></i> Geri</button>
+1647:                 <h2>${esc(series.name)}</h2>
+1648:             </div>
+
+--- Satir 1659-1679 ---
+1659:         `;
+1660: 
+1661:         document.getElementById('isa-series-back').onclick = () => openVODProvider(provider);
+1662: 
+1663:         area.querySelectorAll('[data-season]').forEach(button => {
+1664:             button.onclick = () => showEpisodes(
+1665:                 grouped[Number(button.dataset.season)].episodes,
+1666:                 series,
+1667:                 provider
+1668:             );
+1669:         });
+1670: 
+1671:         return;
+1672:     }
+1673: 
+1674:     if (!episodes.length) episodes = series.items || [];
+1675: 
+1676:     if (!episodes.length) {
+1677:         area.innerHTML = `
+1678:             <div class="isa-vod-toolbar">
+1679:                 <button class="isa-back" id="isa-series-back">Geri</button>
+
+--- Satir 1712-1774 ---
+1712: 
+1713:         const values = Array.from(grouped.values());
+1714:         document.getElementById('isa-series-back').onclick = () => openVODProvider(provider);
+1715: 
+1716:         area.querySelectorAll('[data-season]').forEach(button => {
+1717:             button.onclick = () => showEpisodes(values[Number(button.dataset.season)],series,provider);
+1718:         });
+1719:     } else {
+1720:         showEpisodes(episodes,series,provider);
+1721:     }
+1722: }
+1723: 
+1724: function showEpisodes(episodes,series,provider) {
+1725:     const area = document.getElementById('isa-vod-items');
+1726: 
+1727:     area.innerHTML = `
+1728:         <div class="isa-vod-toolbar">
+1729:             <button class="isa-back" id="isa-episodes-back">
+1730:                 <i class="fas fa-arrow-left"></i> Geri
+1731:             </button>
+1732:             <h2>${esc(series.name)}</h2>
+1733:         </div>
+1734:         <div class="isa-provider-grid">
+1735:             ${episodes.map((episode,index) => `
+1736:                 <button class="isa-provider-card" data-episode="${index}">
+1737:                     <i class="fas fa-circle-play" style="font-size:35px;padding:20px"></i>
+1738:                     <strong>${esc(episode.title||episode.name||('Bölüm '+(index+1)))}</strong>
+1739:                     <small>${esc(episode.date||'Bölümü aç')}</small>
+1740:                 </button>
+1741:             `).join('')}
+1742:         </div>
+1743:     `;
+1744: 
+1745:     document.getElementById('isa-episodes-back').onclick = () => showSeries(series,provider);
+1746: 
+1747:     area.querySelectorAll('[data-episode]').forEach(button => {
+1748:         button.onclick = () => openVODItem(episodes[Number(button.dataset.episode)]);
+1749:     });
+1750: }
+1751: 
+1752: 
+1753: async function resolveStaticMedia(page, depth=0, visited=new Set()) {
+1754:     if (!isHttp(page) || depth > 2 || visited.has(page)) return null;
+1755:     visited.add(page);
+1756: 
+1757:     let html;
+1758:     try {
+1759:         html = await nativeFetch(page);
+1760:     } catch (e) {
+1761:         console.warn('VOD sayfası okunamadı:', e);
+1762:         return null;
+1763:     }
+1764: 
+1765:     if (!html) return null;
+1766: 
+1767:     const patterns = [
+1768:         /<source[^>]+src=["']([^"']+\.(?:m3u8|mp4|webm)(?:\?[^"']*)?)["']/ig,
+1769:         /<video[^>]+src=["']([^"']+\.(?:m3u8|mp4|webm)(?:\?[^"']*)?)["']/ig,
+1770:         /(?:file|source|src|hls|playlist)\s*[:=]\s*["']([^"']+\.(?:m3u8|mp4|webm)(?:\?[^"']*)?)["']/ig,
+1771:         /<meta[^>]+property=["']og:video["'][^>]+content=["']([^"']+)["']/ig
+1772:     ];
+1773: 
+1774:     for (const pattern of patterns) {
+
+--- Satir 1878-1943 ---
+1878:         alert('Video kaynağı çözümlenemedi: '+error.message);
+1879:     }
+1880: }
+1881: 
+1882: 
+1883: async function openIsaFlixVODItem(item) {
+1884:     const candidates = [
+1885:         item.videoUrl,
+1886:         item.video_url,
+1887:         item.playUrl,
+1888:         item.stream,
+1889:         item.file,
+1890:         item.url,
+1891:         item.link,
+1892:         item.embedUrl
+1893:     ].filter(Boolean);
+1894: 
+1895:     const name = item.title || item.name || 'İSAFLIX';
+1896:     const headers = {...(item.headers || {})};
+1897: 
+1898:     const media = candidates.find(isDirectMedia);
+1899: 
+1900:     if (media) {
+1901:         playIsaFlix(name, media, headers, item.queue || [], item.queueIndex || 0);
+1902:         return;
+1903:     }
+1904: 
+1905:     const page = candidates.find(isHttp);
+1906: 
+1907:     if (!page) {
+1908:         alert('Bu içerik için geçerli bağlantı bulunamadı.');
+1909:         return;
+1910:     }
+1911: 
+1912:     const root = isaFlixRoot();
+1913:     const note = document.createElement('p');
+1914: 
+1915:     note.className = 'isa-vod-note';
+1916:     note.textContent = 'Video kaynağı aranıyor...';
+1917: 
+1918:     if (root) root.prepend(note);
+1919: 
+1920:     try {
+1921:         const resolved = await resolveStaticMedia(page);
+1922: 
+1923:         note.remove();
+1924: 
+1925:         headers.Referer = page;
+1926:         const playbackUrl = resolved || page;
+1927: 
+1928:         playIsaFlix(
+1929:             name,
+1930:             playbackUrl,
+1931:             headers,
+1932:             item.queue || [],
+1933:             item.queueIndex || 0
+1934:         );
+1935: 
+1936:     } catch (error) {
+1937:         note.remove();
+1938:         console.error('İSAFLIX video çözümleme:', error);
+1939:         alert('Video açılamadı: ' + error.message);
+1940:     }
+1941: }
+1942: 
+1943: async function refreshAll(forceRefresh=false) {
+
+--- Satir 2443-2577 ---
+2443: 
+2444: 
+2445: 
+2446: 
+2447: // ============================================================
+2448: // İSA FLIX - Catalog TAM KATALOG
+2449: // Canlı TV + Filmler + Diziler
+2450: // ============================================================
+2451: 
+2452: const isaFlixState = {
+2453:     mode: 'movies',
+2454:     category: '',
+2455:     query: '',
+2456:     items: [],
+2457:     shown: 0,
+2458:     batch: 100,
+2459:     series: null,
+2460:     season: null
+2461: };
+2462: 
+2463: const ISAFLIX_WEB_SOURCES = [
+2464:     // FİLM KAYNAKLARI — 7
+2465:     {id:'hdfilmcehennemi2',url:'https://www.hdfilmcehennemi2.biz/',kind:'movie'},
+2466:     {id:'hdfilmcehennemi-nl',url:'https://www.hdfilmcehennemi.nl/',kind:'movie'},
+2467:     {id:'hdfilmcehennemi4',url:'https://hdfilmcehennemi4.co/',kind:'movie'},
+2468:     {id:'hdfilmizle-live',url:'https://www.hdfilmizle.live/',kind:'movie'},
+2469:     {id:'fullhdfilmizlesene',url:'https://www.fullhdfilmizlesene.now/',kind:'movie'},
+2470:     {id:'yabancidizi-film',url:'https://yabancidizi.news/film-izle-hd',kind:'movie'},
+2471:     {id:'filmmodu',url:'https://filmmodu.cc/filmizle/turkce-dublaj-filmler-hd-izle',kind:'movie'},
+2472: 
+2473:     // DİZİ KAYNAKLARI — 7
+2474:     {id:'ddizimom',url:'https://ddizimom.net/',kind:'series'},
+2475:     {id:'dizisol',url:'https://dizisol.com/diziler',kind:'series'},
+2476:     {id:'puhutv',url:'https://puhutv.com/arama',kind:'series'},
+2477:     {id:'atv',url:'https://www.atv.com.tr/diziler',kind:'series'},
+2478:     {id:'showtv',url:'https://www.showtv.com.tr/dizi/tanitim/cennet-mah',kind:'series'},
+2479:     {id:'izle7',url:'https://www.izle7.com/',kind:'series'},
+2480:     {id:'nowtv',url:'https://www.nowtv.com.tr/',kind:'series'}
+2481: ];
+2482: 
+2483: const ISAFLIX_WEB_CACHE_KEY = 'isaflix-web-discovery-v1';
+2484: 
+2485: function isaFlixCatalog() {
+2486:     return window.__ISAFLIX_WEB_CATALOG || {movies:[],series:[]};
+2487: }
+2488: 
+2489: function isaFlixNormalizeTitle(value) {
+2490:     return String(value || '')
+2491:         .replace(/<[^>]*>/g,' ')
+2492:         .replace(/&nbsp;|&#160;/gi,' ')
+2493:         .replace(/&amp;/gi,'&')
+2494:         .replace(/&#39;|&apos;/gi,"'")
+2495:         .replace(/&quot;/gi,'"')
+2496:         .replace(/\s+/g,' ')
+2497:         .trim();
+2498: }
+2499: 
+2500: function isaFlixDiscoverType(text, sourceKind) {
+2501:     const value = String(text || '').toLocaleLowerCase('tr');
+2502:     if (/dizi|series|sezon|season|episode|bölüm|bolum|tv-show/.test(value))
+2503:         return 'series';
+2504:     if (/film|movie|sinema|full-hd/.test(value))
+2505:         return 'movie';
+2506:     return sourceKind === 'series' ? 'series' :
+2507:            sourceKind === 'movie' ? 'movie' : '';
+2508: }
+2509: 
+2510: function isaFlixPosterFromAnchor(anchor, baseUrl) {
+2511:     const image = anchor.querySelector('img') ||
+2512:         (anchor.parentElement && anchor.parentElement.querySelector('img'));
+2513:     if (!image) return '';
+2514:     const raw = image.getAttribute('data-src') ||
+2515:         image.getAttribute('data-lazy-src') ||
+2516:         image.getAttribute('data-original') ||
+2517:         image.getAttribute('src') || '';
+2518:     try {
+2519:         const url = new URL(raw, baseUrl);
+2520:         return /^https?:$/.test(url.protocol) ? url.href : '';
+2521:     } catch (e) {
+2522:         return '';
+2523:     }
+2524: }
+2525: 
+2526: async function isaFlixDiscoverOneSource(source) {
+2527:     const html = await nativeFetch(source.url);
+2528:     if (!html || html.length < 100) return [];
+2529: 
+2530:     const doc = new DOMParser().parseFromString(html, 'text/html');
+2531:     const base = new URL(source.url);
+2532:     const found = [];
+2533:     const seen = new Set();
+2534: 
+2535:     for (const anchor of Array.from(doc.querySelectorAll('a[href]')).slice(0, 1200)) {
+2536:         try {
+2537:             const page = new URL(anchor.getAttribute('href'), base.href);
+2538:             if (!/^https?:$/.test(page.protocol) || page.origin !== base.origin)
+2539:                 continue;
+2540: 
+2541:             const path = page.pathname.toLocaleLowerCase('tr');
+2542:             if (path === '/' || path.length < 3 ||
+2543:                 /login|register|uye-ol|giris|search|arama|category|kategori|tag|etiket|page\/\d+/i.test(path))
+2544:                 continue;
+2545: 
+2546:             const image = isaFlixPosterFromAnchor(anchor, base.href);
+2547:             const title = isaFlixNormalizeTitle(
+2548:                 anchor.getAttribute('title') ||
+2549:                 anchor.getAttribute('aria-label') ||
+2550:                 (anchor.querySelector('img') &&
+2551:                  anchor.querySelector('img').getAttribute('alt')) ||
+2552:                 anchor.textContent
+2553:             );
+2554: 
+2555:             if (!title || title.length < 2 || title.length > 140)
+2556:                 continue;
+2557: 
+2558:             const type = source.kind === 'movie'
+2559:                 ? 'movie'
+2560:                 : source.kind === 'series'
+2561:                     ? 'series'
+2562:                     : isaFlixDiscoverType(
+2563:                         path + ' ' + title + ' ' + (anchor.className || ''),
+2564:                         source.kind
+2565:                     );
+2566:             if (!type) continue;
+2567: 
+2568:             if (/^(izle|watch|detay|details|fragman|trailer|ana sayfa)$/i.test(title))
+2569:                 continue;
+2570: 
+2571:             const key = type + '|' + page.href;
+2572:             if (seen.has(key)) continue;
+2573:             seen.add(key);
+2574: 
+2575:             found.push({
+2576:                 id:'web-' + source.id + '-' + found.length,
+2577:                 name:title,
+
+--- Satir 2590-2633 ---
+2590:     }
+2591: 
+2592:     return found;
+2593: }
+2594: 
+2595: async function isaFlixDiscoverWebCatalog() {
+2596:     const empty = {movies:[],series:[]};
+2597: 
+2598:     try {
+2599:         const cached = localStorage.getItem(ISAFLIX_WEB_CACHE_KEY);
+2600:         if (cached) {
+2601:             const parsed = JSON.parse(cached);
+2602:             if (parsed && Array.isArray(parsed.movies) &&
+2603:                 Array.isArray(parsed.series)) {
+2604:                 window.__ISAFLIX_WEB_CATALOG = parsed;
+2605:                 window.dispatchEvent(new CustomEvent(
+2606:                     'isa:catalog-catalog-updated', {detail:parsed}
+2607:                 ));
+2608:             }
+2609:         }
+2610:     } catch (e) {}
+2611: 
+2612:     const collected = [];
+2613:     let cursor = 0;
+2614:     const workers = Array.from({length:2}, async () => {
+2615:         while (cursor < ISAFLIX_WEB_SOURCES.length) {
+2616:             const source = ISAFLIX_WEB_SOURCES[cursor++];
+2617:             try {
+2618:                 const items = await isaFlixDiscoverOneSource(source);
+2619:                 collected.push(...items);
+2620:             } catch (e) {
+2621:                 console.warn('İSAFLIX kaynak taraması tamamlanamadı:', source.id);
+2622:             }
+2623:         }
+2624:     });
+2625: 
+2626:     await Promise.all(workers);
+2627: 
+2628:     const unique = new Map();
+2629:     for (const item of collected) {
+2630:         const key = item.type + '|' +
+2631:             item.title.toLocaleLowerCase('tr')
+2632:                 .replace(/[^a-z0-9çğıöşü]/gi,'');
+2633:         if (!unique.has(key)) unique.set(key, item);
+
+--- Satir 2637-2865 ---
+2637:                 previous.poster_url = item.poster_url;
+2638:         }
+2639:     }
+2640: 
+2641:     const all = Array.from(unique.values());
+2642:     const catalog = {
+2643:         movies:all.filter(x => x.type === 'movie'),
+2644:         series:all.filter(x => x.type === 'series')
+2645:     };
+2646: 
+2647:     if (catalog.movies.length || catalog.series.length) {
+2648:         window.__ISAFLIX_WEB_CATALOG = catalog;
+2649:         try {
+2650:             localStorage.setItem(ISAFLIX_WEB_CACHE_KEY, JSON.stringify(catalog));
+2651:         } catch (e) {}
+2652:     } else if (!window.__ISAFLIX_WEB_CATALOG) {
+2653:         window.__ISAFLIX_WEB_CATALOG = empty;
+2654:     }
+2655: 
+2656:     window.dispatchEvent(new CustomEvent(
+2657:         'isa:catalog-catalog-updated',
+2658:         {detail:window.__ISAFLIX_WEB_CATALOG}
+2659:     ));
+2660: }
+2661: 
+2662: function isaFlixArray(value) {
+2663:     return Array.isArray(value) ? value : [];
+2664: }
+2665: 
+2666: function isaFlixText(value, fallback='') {
+2667:     return String(value == null ? fallback : value);
+2668: }
+2669: 
+2670: function isaFlixHeaders(item) {
+2671:     const headers = {...(item.headers || {})};
+2672:     if (item.referer) headers.Referer = item.referer;
+2673:     if (item.user_agent) headers['User-Agent'] = item.user_agent;
+2674:     return headers;
+2675: }
+2676: 
+2677: function isaFlixModeItems(data, mode) {
+2678:     if (mode === 'live') return isaFlixArray(data.live_channels);
+2679:     if (mode === 'movies') return isaFlixArray(data.movies);
+2680:     return isaFlixArray(data.series);
+2681: }
+2682: 
+2683: function isaFlixCategory(item, mode) {
+2684:     if (mode === 'live') return isaFlixText(item.category_name, 'Genel');
+2685:     if (mode === 'movies') return isaFlixText(item.category_name, 'Diğer');
+2686:     return isaFlixText(item.platform_name || item.category_name, 'Diğer');
+2687: }
+2688: 
+2689: function isaFlixCategories(data, mode) {
+2690:     let source = [];
+2691:     if (mode === 'live') source = isaFlixArray(data.live_categories);
+2692:     if (mode === 'movies') source = isaFlixArray(data.movie_categories);
+2693:     if (mode === 'series') source = isaFlixArray(data.series_platforms);
+2694: 
+2695:     let names = source.map(x => isaFlixText(x.name).trim()).filter(Boolean);
+2696:     if (!names.length) {
+2697:         names = [...new Set(isaFlixModeItems(data, mode).map(x =>
+2698:             isaFlixCategory(x, mode)
+2699:         ))];
+2700:     }
+2701:     return [...new Set(names)];
+2702: }
+2703: 
+2704: function isaFlixRoot() {
+2705:     return document.getElementById('isa-flix-app');
+2706: }
+2707: 
+2708: function isaFlixOpen() {
+2709:     const panel = document.getElementById('isa-flix-panel');
+2710:     return !!(panel && panel.classList.contains('active'));
+2711: }
+2712: 
+2713: function isaFlixRender() {
+2714:     const root = isaFlixRoot();
+2715:     if (!root) return;
+2716: 
+2717:     const data = isaFlixCatalog();
+2718:     const modes = [
+2719:         ['movies', 'Filmler', 'fa-film'],
+2720:         ['series', 'Diziler', 'fa-clapperboard']
+2721:     ];
+2722: 
+2723:     const totalMovies = isaFlixArray(data.movies).length;
+2724:     const totalSeries = isaFlixArray(data.series).length;
+2725: 
+2726:     root.innerHTML = `
+2727:         <div class="isaf-header">
+2728:             <div class="isaf-brand"><span>İSA</span> FLIX</div>
+2729:             <div class="isaf-count">
+2730:                 ${totalMovies.toLocaleString('tr-TR')} film ·
+2731:                 ${totalSeries.toLocaleString('tr-TR')} dizi
+2732:             </div>
+2733:         </div>
+2734:         <div class="isaf-tabs">
+2735:             ${modes.map(([id,label,icon]) => `
+2736:                 <button type="button" data-isaf-mode="${id}"
+2737:                     class="${isaFlixState.mode===id?'active':''}">
+2738:                     <i class="fas ${icon}"></i> ${label}
+2739:                 </button>
+2740:             `).join('')}
+2741:         </div>
+2742:         <div class="isaf-tools">
+2743:             <select id="isaf-category" aria-label="Kategori">
+2744:                 <option value="">Bütün kategoriler</option>
+2745:                 ${isaFlixCategories(data, isaFlixState.mode).map(name =>
+2746:                     `<option value="${esc(name)}" ${isaFlixState.category === name ? 'selected' : ''}>${esc(name)}</option>`
+2747:                 ).join('')}
+2748:             </select>
+2749:             <input id="isaf-search" type="search"
+2750:                 placeholder="İçerik ara..." value="${esc(isaFlixState.query)}">
+2751: 
+2752:         </div>
+2753:         <div id="isaf-status" class="isaf-status"></div>
+2754:         <div id="isaf-grid" class="isaf-grid"></div>
+2755:         <button id="isaf-more" class="isaf-more" type="button">
+2756:             Daha fazla içerik yükle
+2757:         </button>
+2758:     `;
+2759: 
+2760:     root.querySelectorAll('[data-isaf-mode]').forEach(button => {
+2761:         button.onclick = () => {
+2762:             isaFlixState.mode = button.dataset.isafMode;
+2763:             isaFlixState.category = '';
+2764:             isaFlixState.query = '';
+2765:             isaFlixState.series = null;
+2766:             isaFlixRender();
+2767:         };
+2768:     });
+2769: 
+2770:     const search = document.getElementById('isaf-search');
+2771: 
+2772:     search.oninput = () => {
+2773:         isaFlixState.query = search.value;
+2774:         isaFlixRenderItems();
+2775:     };
+2776: 
+2777:     const categorySelect = document.getElementById('isaf-category');
+2778:     if (categorySelect) {
+2779:         categorySelect.onchange = () => {
+2780:             isaFlixState.category = categorySelect.value;
+2781:             isaFlixRenderItems();
+2782:         };
+2783:     }
+2784: 
+2785:     isaFlixRenderItems();
+2786: }
+2787: 
+2788: function isaFlixRenderItems() {
+2789:     const data = isaFlixCatalog();
+2790:     const grid = document.getElementById('isaf-grid');
+2791:     const status = document.getElementById('isaf-status');
+2792:     const more = document.getElementById('isaf-more');
+2793:     if (!grid || !status || !more) return;
+2794: 
+2795:     const mode = isaFlixState.mode;
+2796:     const query = isaFlixState.query.trim().toLocaleLowerCase('tr');
+2797:     const category = isaFlixState.category;
+2798: 
+2799:     let items = isaFlixModeItems(data, mode);
+2800: 
+2801:     items = items.filter(item => {
+2802:          if (category && isaFlixCategory(item, mode) !== category) return false;
+2803:         if (!query) return true;
+2804: 
+2805:         const text = [
+2806:             item.name, item.title, item.category_name,
+2807:             item.platform_name, item.description, item.year
+2808:         ].join(' ').toLocaleLowerCase('tr');
+2809: 
+2810:         return text.includes(query);
+2811:     });
+2812: 
+2813:     isaFlixState.items = items;
+2814:     isaFlixState.shown = 0;
+2815:     grid.innerHTML = '';
+2816: 
+2817:     status.textContent =
+2818:         items.length.toLocaleString('tr-TR') + ' içerik bulundu.';
+2819: 
+2820:     if (!items.length) {
+2821:         grid.innerHTML = '<p class="isa-vod-note">Bu aramada içerik bulunamadı.</p>';
+2822:         more.hidden = true;
+2823:         return;
+2824:     }
+2825: 
+2826:     more.hidden = false;
+2827:     more.onclick = isaFlixLoadMore;
+2828:     isaFlixLoadMore();
+2829: }
+2830: 
+2831: function isaFlixLoadMore() {
+2832:     const grid = document.getElementById('isaf-grid');
+2833:     const more = document.getElementById('isaf-more');
+2834:     const status = document.getElementById('isaf-status');
+2835:     if (!grid || !more) return;
+2836: 
+2837:     const items = isaFlixState.items;
+2838:     const start = isaFlixState.shown;
+2839:     const end = Math.min(start + isaFlixState.batch, items.length);
+2840:     const fragment = document.createDocumentFragment();
+2841: 
+2842:     for (let i = start; i < end; i++) {
+2843:         const item = items[i];
+2844:         const mode = isaFlixState.mode;
+2845:         const title = item.title || item.name || 'İsimsiz içerik';
+2846:         const image = item.poster_url || item.logo_url ||
+2847:             item.image_url || item.poster || item.image || '';
+2848:         const detail = mode === 'live'
+2849:             ? isaFlixCategory(item,mode)
+2850:             : [item.year, isaFlixCategory(item,mode)].filter(Boolean).join(' · ');
+2851: 
+2852:         const card = document.createElement('button');
+2853:         card.type = 'button';
+2854:         card.className = 'isaf-card';
+2855: 
+2856:         const img = document.createElement('img');
+2857:         img.loading = 'lazy';
+2858:         img.decoding = 'async';
+2859:         img.alt = '';
+2860:         img.src = image;
+2861:         img.onerror = () => { img.style.display = 'none'; };
+2862: 
+2863:         const name = document.createElement('strong');
+2864:         name.textContent = cleanMediaTitle(title);
+2865: 
+
+--- Satir 2872-3045 ---
+2872:             icon.className = 'fas ' + (mode==='live'?'fa-tv':'fa-film');
+2873:             card.appendChild(icon);
+2874:         }
+2875: 
+2876:         card.append(name,small);
+2877:         card.onclick = () => isaFlixOpenItem(item, i);
+2878:         fragment.appendChild(card);
+2879:     }
+2880: 
+2881:     grid.appendChild(fragment);
+2882:     isaFlixState.shown = end;
+2883: 
+2884:     status.textContent =
+2885:         end.toLocaleString('tr-TR') + ' / ' +
+2886:         items.length.toLocaleString('tr-TR') + ' içerik gösteriliyor.';
+2887: 
+2888:     more.hidden = end >= items.length;
+2889: }
+2890: 
+2891: function isaFlixOpenItem(item) {
+2892:     const mode = isaFlixState.mode;
+2893: 
+2894:     if (mode === 'live') {
+2895:         const data = isaFlixCatalog();
+2896:         const category = isaFlixCategory(item,'live');
+2897:         const queue = isaFlixArray(data.live_channels)
+2898:             .filter(x => isaFlixCategory(x,'live') === category)
+2899:             .filter(x => /^https?:\/\//i.test(String(x.stream_url||'')))
+2900:             .map(x => ({
+2901:                 name:x.name || 'Kanal',
+2902:                 url:x.stream_url,
+2903:                 logo:x.logo_url || x.image_url || x.poster_url || '',
+2904:                 group:category,
+2905:                 headers:isaFlixHeaders(x),
+2906:                 is_live:true
+2907:             }));
+2908: 
+2909:         const index = queue.findIndex(x => x.url === item.stream_url);
+2910:         if (index >= 0) play(queue[index],queue,index,true);
+2911:         else alert('Bu kanal için geçerli yayın bağlantısı bulunamadı.');
+2912:         return;
+2913:     }
+2914: 
+2915:     if (mode === 'movies') {
+2916:         const url = item.stream_url || item.page_url || item.url || '';
+2917:         if (!/^https?:\/\//i.test(url)) {
+2918:             alert('Bu film için geçerli bağlantı bulunamadı.');
+2919:             return;
+2920:         }
+2921:         if (!item.stream_url && !isDirectMedia(url)) {
+2922:             openIsaFlixVODItem({
+2923:                 name:item.title || item.name || 'Film',
+2924:                 title:item.title || item.name || 'Film',
+2925:                 url:url,
+2926:                 page_url:url,
+2927:                 poster:item.poster_url || item.image_url || '',
+2928:                 logo:item.poster_url || item.image_url || '',
+2929:                 headers:isaFlixHeaders(item),
+2930:                 queue:[],
+2931:                 queueIndex:0
+2932:             });
+2933:             return;
+2934:         }
+2935: 
+2936:         const queue = isaFlixArray(isaFlixState.items)
+2937:             .filter(x => /^https?:\/\//i.test(String(x.stream_url || '')))
+2938:             .map(x => ({
+2939:                 name:cleanMediaTitle(x.title || x.name || 'Film'),
+2940:                 url:x.stream_url,
+2941:                 logo:x.poster_url || x.image_url || '',
+2942:                 group:isaFlixCategory(x,'movies'),
+2943:                 headers:isaFlixHeaders(x),
+2944:                 season:0,
+2945:                 episode:0,
+2946:                 is_live:false
+2947:             }));
+2948: 
+2949:         let queueIndex = queue.findIndex(x =>
+2950:             x.url === url &&
+2951:             x.name === cleanMediaTitle(item.title || item.name || 'Film')
+2952:         );
+2953:         if (queueIndex < 0) {
+2954:             queueIndex = queue.findIndex(x => x.url === url);
+2955:         }
+2956: 
+2957:         if (queueIndex < 0) {
+2958:             alert('Film oynatma listesine eklenemedi.');
+2959:             return;
+2960:         }
+2961: 
+2962:         openIsaFlixVODItem({
+2963:             name:item.title || item.name || 'Film',
+2964:             title:item.title || item.name || 'Film',
+2965:             url,
+2966:             videoUrl:url,
+2967:             poster:item.poster_url || item.image_url || '',
+2968:             logo:item.poster_url || item.image_url || '',
+2969:             headers:isaFlixHeaders(item),
+2970:             referer:item.referer || '',
+2971:             queue:queue,
+2972:             queueIndex:queueIndex
+2973:         });
+2974:         return;
+2975:     }
+2976: 
+2977:     isaFlixShowSeries(item);
+2978: }
+2979: 
+2980: async function isaFlixLoadWebSeries(series) {
+2981:     if (series.__webEpisodesLoaded) return;
+2982:     series.__webEpisodesLoaded = true;
+2983: 
+2984:     if (!isHttp(series.page_url)) return;
+2985: 
+2986:     const html = await nativeFetch(series.page_url);
+2987:     const doc = new DOMParser().parseFromString(html, 'text/html');
+2988:     const base = new URL(series.page_url);
+2989:     const episodes = [];
+2990:     const seen = new Set();
+2991: 
+2992:     for (const anchor of Array.from(doc.querySelectorAll('a[href]'))) {
+2993:         try {
+2994:             const page = new URL(anchor.getAttribute('href'), base.href);
+2995: 
+2996:             if (!/^https?:$/.test(page.protocol) || page.origin !== base.origin)
+2997:                 continue;
+2998: 
+2999:             const title = isaFlixNormalizeTitle(
+3000:                 anchor.getAttribute('title') ||
+3001:                 (anchor.querySelector('img') &&
+3002:                  anchor.querySelector('img').getAttribute('alt')) ||
+3003:                 anchor.textContent
+3004:             );
+3005: 
+3006:             const hint = (page.pathname + ' ' + title).toLocaleLowerCase('tr');
+3007: 
+3008:             if (!/bölüm|bolum|episode|part|s\d+e\d+|\d+x\d+|sezon|season/i.test(hint))
+3009:                 continue;
+3010: 
+3011:             if (!title || seen.has(page.href)) continue;
+3012:             seen.add(page.href);
+3013: 
+3014:             const episode = {
+3015:                 title,
+3016:                 name: title,
+3017:                 page_url: page.href
+3018:             };
+3019: 
+3020:             episode.season_number = isaFlixExplicitSeasonNumber(episode);
+3021:             episode.episode_number = isaFlixExplicitEpisodeNumber(episode);
+3022: 
+3023:             episodes.push(episode);
+3024:         } catch (e) {}
+3025:     }
+3026: 
+3027:     series.episodes = episodes;
+3028: }
+3029: 
+3030: function isaFlixExplicitSeasonNumber(item) {
+3031:     const raw = item.season_number ?? item.season;
+3032: 
+3033:     if (raw !== undefined && raw !== null &&
+3034:         String(raw).trim() !== '' &&
+3035:         Number.isFinite(Number(raw)) && Number(raw) > 0) {
+3036:         return Number(raw);
+3037:     }
+3038: 
+3039:     const hint = [
+3040:         item.title, item.name, item.page_url, item.url,
+3041:         item.season
+3042:     ].filter(Boolean).join(' ');
+3043: 
+3044:     const patterns = [
+3045:         /\bS0*(\d+)E0*\d+\b/i,
+
+--- Satir 3054-3074 ---
+3054:     }
+3055: 
+3056:     return 0;
+3057: }
+3058: 
+3059: function isaFlixExplicitEpisodeNumber(item) {
+3060:     const raw = item.episode_number ?? item.episode ?? item.episode_num;
+3061: 
+3062:     if (raw !== undefined && raw !== null &&
+3063:         String(raw).trim() !== '' &&
+3064:         Number.isFinite(Number(raw)) && Number(raw) > 0) {
+3065:         return Number(raw);
+3066:     }
+3067: 
+3068:     const hint = [
+3069:         item.title, item.name, item.page_url, item.url
+3070:     ].filter(Boolean).join(' ');
+3071: 
+3072:     const patterns = [
+3073:         /\bS\d+E0*(\d+)\b/i,
+3074:         /\b\d+x0*(\d+)\b/i,
+
+--- Satir 3082-3125 ---
+3082: 
+3083:     return 0;
+3084: }
+3085: 
+3086: 
+3087: function isaFlixShowSeries(series) {
+3088:     const root = isaFlixRoot();
+3089:     if (!root) return;
+3090: 
+3091:     const episodes = isaFlixArray(series.episodes);
+3092: 
+3093:     if (!episodes.length && series.page_url && !series.__webEpisodesLoaded) {
+3094:         root.innerHTML = '<p class="isa-loading">Bütün bölümler yükleniyor...</p>';
+3095: 
+3096:         isaFlixLoadWebSeries(series)
+3097:             .then(() => isaFlixShowSeries(series))
+3098:             .catch(error => {
+3099:                 console.warn('Bölümler yüklenemedi:', error);
+3100:                 series.__webEpisodesLoaded = true;
+3101:                 isaFlixShowSeries(series);
+3102:             });
+3103:         return;
+3104:     }
+3105: 
+3106:     const prepared = episodes.map((episode, index) => ({
+3107:         ...episode,
+3108:         __index: index,
+3109:         __realSeason: isaFlixExplicitSeasonNumber(episode),
+3110:         __realEpisode: isaFlixExplicitEpisodeNumber(episode)
+3111:     }));
+3112: 
+3113:     // Sezon kartları yok. Bölümler tek listede sıralanır.
+3114:     prepared.sort((a, b) => {
+3115:         const sa = a.__realSeason || 0;
+3116:         const sb = b.__realSeason || 0;
+3117:         if (sa !== sb) return sa - sb;
+3118: 
+3119:         const ea = a.__realEpisode || 0;
+3120:         const eb = b.__realEpisode || 0;
+3121:         if (ea && eb && ea !== eb) return ea - eb;
+3122:         if (ea && !eb) return -1;
+3123:         if (!ea && eb) return 1;
+3124: 
+3125:         return a.__index - b.__index;
+
+--- Satir 3130-3168 ---
+3130:             <div class="isaf-detail">
+3131:                 <button class="isa-back" id="isaf-back">← Dizilere dön</button>
+3132:                 <h2>${esc(series.title || series.name || 'Dizi')}</h2>
+3133:                 <p class="isa-vod-note">Bu dizide bölüm bulunamadı.</p>
+3134:             </div>`;
+3135:         document.getElementById('isaf-back').onclick = () => isaFlixRender();
+3136:         return;
+3137:     }
+3138: 
+3139:     isaFlixShowEpisodes(series, 0, prepared);
+3140: }
+3141: 
+3142: 
+3143: function isaFlixShowEpisodes(series, number, episodes) {
+3144:     const root = isaFlixRoot();
+3145:     if (!root) return;
+3146: 
+3147:     const sortedEpisodes = [...episodes].sort((a, b) => {
+3148:         const sa = isaFlixExplicitSeasonNumber(a) || 0;
+3149:         const sb = isaFlixExplicitSeasonNumber(b) || 0;
+3150:         if (sa !== sb) return sa - sb;
+3151: 
+3152:         const an = isaFlixExplicitEpisodeNumber(a);
+3153:         const bn = isaFlixExplicitEpisodeNumber(b);
+3154:         if (an && bn && an !== bn) return an - bn;
+3155:         if (an && !bn) return -1;
+3156:         if (!an && bn) return 1;
+3157: 
+3158:         return Number(a.__index || 0) - Number(b.__index || 0);
+3159:     });
+3160: 
+3161:     const seriesTitle = series.title || series.name || 'Dizi';
+3162: 
+3163:     root.innerHTML = `
+3164:         <div class="isaf-detail">
+3165:             <button class="isa-back" id="isaf-season-back">
+3166:                 <i class="fas fa-arrow-left"></i> Dizilere dön
+3167:             </button>
+3168:             <h2>${esc(seriesTitle)}</h2>
+
+--- Satir 3180-3213 ---
+3180:             </div>
+3181:         </div>
+3182:     `;
+3183: 
+3184:     document.getElementById('isaf-season-back').onclick = () => {
+3185:         isaFlixState.mode = 'series';
+3186:         isaFlixRender();
+3187:     };
+3188: 
+3189:     root.querySelectorAll('[data-isaf-episode]').forEach(button => {
+3190:         button.onclick = () => {
+3191:             const episode = sortedEpisodes[Number(button.dataset.isafEpisode)];
+3192:             const url = episode.stream_url || '';
+3193: 
+3194:             const seasonNumber =
+3195:                 isaFlixExplicitSeasonNumber(episode) ||
+3196:                 (Number(number) > 0 ? Number(number) : 0);
+3197: 
+3198:             const episodeNumber = isaFlixExplicitEpisodeNumber(episode);
+3199: 
+3200:             if (!/^https?:\/\//i.test(url) && isHttp(episode.page_url)) {
+3201:                 const note = document.createElement('p');
+3202:                 note.className = 'isa-vod-note';
+3203:                 note.textContent = 'Video hazırlanıyor...';
+3204:                 root.prepend(note);
+3205: 
+3206:                 resolveStaticMedia(episode.page_url)
+3207:                     .then(resolved => {
+3208:                         note.remove();
+3209:                         const playbackUrl = resolved || episode.page_url;
+3210: 
+3211:                         const showName = cleanMediaTitle(seriesTitle);
+3212:                         const entry = {
+3213:                             name: showName,
+
+--- Satir 3220-3366 ---
+3220:                             series_id: series.id || series.series_id || series.page_url,
+3221:                             series_name: showName,
+3222:                             series_url: series.page_url || ''
+3223:                         };
+3224: 
+3225:                         playIsaFlix(showName, playbackUrl, entry.headers, [entry], 0);
+3226:                     })
+3227:                     .catch(error => {
+3228:                         note.remove();
+3229:                         console.warn('Bölüm bağlantısı:', error);
+3230: 
+3231:                         const showName = cleanMediaTitle(seriesTitle);
+3232:                         const entry = {
+3233:                             name: showName,
+3234:                             url: episode.page_url,
+3235:                             headers: {Referer: episode.page_url},
+3236:                             season: seasonNumber,
+3237:                             episode: episodeNumber,
+3238:                             is_live: false,
+3239:                             is_series: true,
+3240:                             series_id: series.id || series.series_id || series.page_url,
+3241:                             series_name: showName,
+3242:                             series_url: series.page_url || ''
+3243:                         };
+3244: 
+3245:                         playIsaFlix(
+3246:                             showName,
+3247:                             episode.page_url,
+3248:                             entry.headers,
+3249:                             [entry],
+3250:                             0
+3251:                         );
+3252:                     });
+3253: 
+3254:                 return;
+3255:             }
+3256: 
+3257:             if (!/^https?:\/\//i.test(url)) {
+3258:                 alert('Bu bölüm için geçerli yayın bağlantısı bulunamadı.');
+3259:                 return;
+3260:             }
+3261: 
+3262:             const allEpisodes = isaFlixArray(series.episodes)
+3263:                 .map(ep => ({
+3264:                     ...ep,
+3265:                     __season: isaFlixExplicitSeasonNumber(ep),
+3266:                     __episode: isaFlixExplicitEpisodeNumber(ep)
+3267:                 }))
+3268:                 .filter(ep => /^https?:\/\//i.test(String(ep.stream_url || '')))
+3269:                 .sort((a, b) =>
+3270:                     a.__season - b.__season ||
+3271:                     a.__episode - b.__episode
+3272:                 );
+3273: 
+3274:             const showName = cleanMediaTitle(seriesTitle);
+3275: 
+3276:             const queue = allEpisodes.map(ep => ({
+3277:                 name: showName,
+3278:                 url: ep.stream_url,
+3279:                 logo: ep.image_url || series.poster_url || series.image_url || '',
+3280:                 group: series.platform_name || 'Diziler',
+3281:                 headers: isaFlixHeaders(ep),
+3282:                 season: ep.__season,
+3283:                 episode: ep.__episode,
+3284:                 is_live: false
+3285:             }));
+3286: 
+3287:             let index = queue.findIndex(x =>
+3288:                 x.url === url &&
+3289:                 x.season === seasonNumber &&
+3290:                 x.episode === episodeNumber
+3291:             );
+3292: 
+3293:             if (index < 0) index = queue.findIndex(x => x.url === url);
+3294: 
+3295:             if (index < 0) {
+3296:                 alert('Bölüm oynatma listesine eklenemedi.');
+3297:                 return;
+3298:             }
+3299: 
+3300:             playIsaFlix(
+3301:                 showName,
+3302:                 url,
+3303:                 isaFlixHeaders(episode),
+3304:                 queue,
+3305:                 index
+3306:             );
+3307:         };
+3308:     });
+3309: }
+3310: 
+3311: window.addEventListener('isa:catalog-catalog-updated', event => {
+3312:     const data = event.detail;
+3313:     if (!data || typeof data !== 'object') return;
+3314:     if (isaFlixRoot()) isaFlixRender();
+3315: });
+3316: 
+3317: 
+3318: function isaFlixInit() {
+3319:     const panel = document.getElementById('isa-flix-panel');
+3320:     if (!panel) return;
+3321: 
+3322:     if (!document.getElementById('isa-flix-app')) {
+3323:         panel.innerHTML = '<div id="isa-flix-app"></div>';
+3324:     }
+3325: 
+3326:     const data = isaFlixCatalog();
+3327: 
+3328:     if (data && Object.keys(data).length) {
+3329:         isaFlixRender();
+3330:     }
+3331: }
+3332: 
+3333: window.isaHandleBack = function() {
+3334:     const films = document.getElementById('isa-films-panel');
+3335:     const series = document.getElementById('isa-series-panel');
+3336: 
+3337:     if ((films && films.classList.contains('active')) ||
+3338:         (series && series.classList.contains('active'))) {
+3339:         const homeTab = document.querySelector('[data-tab="isa-live-panel"]');
+3340:         if (homeTab) homeTab.click();
+3341:         return true;
+3342:     }
+3343: 
+3344:     return false;
+3345: };
+3346: 
+3347: function start() {
+3348:     initScrollArrows();
+3349:     isaFlixInit();
+3350:     loadSaved();
+3351:     bindControls();
+3352:     renderSavedLists();
+3353:     renderSourceFields();
+3354:     refreshAll(false);
+3355:     try { localStorage.removeItem('isaflix-web-discovery-v1'); } catch(e) {}
+3356: }
+3357: 
+3358: if (document.readyState === 'loading') {
+3359: 
+3360: 
+3361: document.addEventListener('DOMContentLoaded',start);
+3362: } else {
+3363:     start();
+3364: }
+3365: 
+3366: })();
+
+=================================================================
+JSON KATALOG SEMASI
+=================================================================
+{
+  "version": {
+    "type": "int",
+    "count": null,
+    "sample": 1
+  },
+  "created_at": {
+    "type": "str",
+    "count": null,
+    "sample": "2026-11-02 11:26:04"
+  },
+  "groups": {
+    "type": "list",
+    "count": 96,
+    "sample": "TR► Spor"
+  },
+  "vod_categories": {
+    "type": "list",
+    "count": 36,
+    "sample": {
+      "category_id": "113",
+      "category_name": "DUAL► Güncel Dual Filmler",
+      "parent_id": 0
+    }
+  },
+  "series_categories": {
+    "type": "list",
+    "count": 20,
+    "sample": {
+      "category_id": "51",
+      "category_name": "TR► Tv Dizileri Son Bölüm",
+      "parent_id": 0
+    }
+  },
+  "movies": {
+    "type": "list",
+    "count": 21843,
+    "sample": {
+      "id": "116108",
+      "name": "Barbie in the Nutcracker",
+      "category_id": "48",
+      "category_name": "TR► Cocuk Filmleri",
+      "group_title": "TR► Cocuk Filmleri",
+      "poster_url": "http://image.tmdb.org/t/p/w154/suSGUJNCgdVVjCXcJBDtjKxWTlg.jpg",
+      "container_extension": "mkv"
+    }
+  },
+  "series": {
+    "type": "list",
+    "count": 1679,
+    "sample": {
+      "id": "188",
+      "name": "Winx Efsanesi: Kader",
+      "category_id": "46",
+      "category_name": "DUAL► Netflix",
+      "group_title": "DUAL► Netflix",
+      "poster_url": "http://image.tmdb.org/t/p/w154/oHj6guMrLfQcBzo3uxwBJc8Y736.jpg",
+      "episodes": [
+        {
+          "id": "44523",
+          "series_id": "188",
+          "series_name": "Winx Efsanesi: Kader",
+          "name": "Netflix-Winx.Efsanesi.Kader.2021.S01E01",
+          "season": "1",
+          "episode_num": 1,
+          "poster_url": "http://drbxtv.com:1962/images//eoXN0ETB4X2VP4lUbLyPtf6atJz_small.jpg"
+        },
+        {
+          "id": "51775",
+          "series_id": "188",
+          "series_name": "Winx Efsanesi: Kader",
+          "name": "Winx Efsanesi: Kader - S01E01 - 1. Bölüm",
+          "season": "1",
+          "episode_num": 2,
+          "poster_url": "https://image.tmdb.org/t/p/w300/eoXN0ETB4X2VP4lUbLyPtf6atJz.jpg"
+        },
+        {
+          "id": "44524",
+          "series_id": "188",
+          "series_name": "Winx Efsanesi: Kader",
+          "name": "Netflix-Winx.Efsanesi.Kader.2021.S01E02",
+          "season": "1",
+          "episode_num": 3,
+          "poster_url": "http://drbxtv.com:1962/images//6cx6P9sUh9DbEyI8OoXNFcSFuMF_small.jpg"
+        },
+        {
+          "id": "51776",
+          "series_id": "188",
+          "series_name": "Winx Efsanesi: Kader",
+          "name": "Winx Efsanesi: Kader - S01E02 - 2. Bölüm",
+          "season": "1",
+          "episode_num": 4,
+          "poster_url": "https://image.tmdb.org/t/p/w300/6cx6P9sUh9DbEyI8OoXNFcSFuMF.jpg"
+        },
+        {
+          "id": "44525",
+          "series_id": "188",
+          "series_name": "Winx Efsanesi: Kader",
+          "name": "Netflix-Winx.Efsanesi.Kader.2021.S01E03",
+          "season": "1",
+          "episode_num": 5,
+          "poster_url": "http://drbxtv.com:1962/images//cvk67IEtzTVVqnM5BGF3Zb9gvYS_small.jpg"
+        },
+        {
+          "id": "51777",
+          "series_id": "188",
+          "series_name": "Winx Efsanesi: Kader",
+          "name": "Winx Efsanesi: Kader - S01E03 - 3. Bölüm",
+          "season": "1",
+          "episode_num": 6,
+          "poster_url": "https://image.tmdb.org/t/p/w300/cvk67IEtzTVVqnM5BGF3Zb9gvYS.jpg"
+        },
+        {
+          "id": "44526",
+          "series_id": "188",
+          "series_name": "Winx Efsanesi: Kader",
+          "name": "Netflix-Winx.Efsanesi.Kader.2021.S01E04",
+          "season": "1",
+          "episode_num": 7,
+          "poster_url": "http://drbxtv.com:1962/images//131QNJy91Zn9hdBlpoJ97vaMyaF_small.jpg"
+        },
+        {
+          "id": "51778",
+          "series_id": "188",
+          "series_name": "Winx Efsanesi: Kader",
+          "name": "Winx Efsanesi: Kader - S01E04 - 4. Bölüm",
+          "season": "1",
+          "episode_num": 8,
+          "poster_url": "https://image.tmdb.org/t/p/w300/131QNJy91Zn9hdBlpoJ97vaMyaF.jpg"
+        },
+        {
+          "id": "44527",
+          "series_id": "188",
+          "series_name": "Winx Efsanesi: Kader",
+          "name": "Netflix-Winx.Efsanesi.Kader.2021.S01E05",
+          "season": "1",
+          "episode_num": 9,
+          "poster_url": "http://drbxtv.com:1962/images//y13DC3FbBqDx6mSoOu9QwWhAHB5_small.jpg"
+        },
+        {
+          "id": "51773",
+          "series_id": "188",
+          "series_name": "Winx Efsanesi: Kader",
+          "name": "Winx Efsanesi: Kader - S01E05 - 5. Bölüm",
+          "season": "1",
+          "episode_num": 10,
+          "poster_url": "https://image.tmdb.org/t/p/w300/y13DC3FbBqDx6mSoOu9QwWhAHB5.jpg"
+        },
+        {
+          "id": "44528",
+          "series_id": "188",
+          "series_name": "Winx Efsanesi: Kader",
+          "name": "Netflix-Winx.Efsanesi.Kader.2021.S01E06",
+          "season": "1",
+          "episode_num": 11,
+          "poster_url": "http://drbxtv.com:1962/images//26ZelOlTYRzXRBukdsfzCxondYV_small.jpg"
+        },
+        {
+          "id": "51774",
+          "series_id": "188",
+          "series_name": "Winx Efsanesi: Kader",
+          "name": "Winx Efsanesi: Kader - S01E06 - 6. Bölüm",
+          "season": "1",
+          "episode_num": 12,
+          "poster_url": "https://image.tmdb.org/t/p/w300/26ZelOlTYRzXRBukdsfzCxondYV.jpg"
+        }
+      ]
+    }
+  },
+  "episodes": {
+    "type": "list",
+    "count": 33806,
+    "sample": {
+      "id": "44523",
+      "series_id": "188",
+      "series_name": "Winx Efsanesi: Kader",
+      "name": "Netflix-Winx.Efsanesi.Kader.2021.S01E01",
+      "season": "1",
+      "episode_num": 1,
+      "poster_url": "http://drbxtv.com:1962/images//eoXN0ETB4X2VP4lUbLyPtf6atJz_small.jpg"
+    }
+  },
+  "poster_index": {
+    "type": "dict",
+    "count": 0,
+    "sample": {}
+  },
+  "poster_urls": {
+    "type": "list",
+    "count": 45032,
+    "sample": "http://drbxtv.com:1962/images/"
+  },
+  "stats": {
+    "type": "dict",
+    "count": 5,
+    "sample": [
+      "groups",
+      96
+    ]
+  }
+}
+
+=================================================================
+DOSYA: app/src/main/AndroidManifest.xml
+=================================================================
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <application
+        android:allowBackup="false"
+        android:label="İSA TV HD"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:theme="@style/AppTheme"
+        android:usesCleartextTraffic="true">
+
+        <activity
+            android:name=".PlayerActivity"
+            android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" />
+
+        <activity
+            android:name=".IsaflixPlayerActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".SplashActivity"
+            android:exported="true"
+            android:theme="@style/SplashTheme">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+        </activity>
+
+    </application>
+</manifest>
+
+
+=================================================================
+DOSYA: app/build.gradle
+=================================================================
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.isatvhd.player'
+    compileSdk 34
+    buildToolsVersion "35.0.0"
+
+    defaultConfig {
+        applicationId 'com.isatvhd.player'
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+
+        ndk {
+            abiFilters 'armeabi-v7a', 'arm64-v8a'
+        }
+    }
+}
+
+dependencies {
+    implementation 'com.google.mlkit:text-recognition:16.0.1'
+    implementation 'com.google.mlkit:barcode-scanning:17.3.0'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'com.google.android.material:material:1.12.0'
+    implementation 'androidx.media3:media3-exoplayer:1.4.1'
+    implementation 'androidx.media3:media3-exoplayer-hls:1.4.1'
+    implementation 'androidx.media3:media3-exoplayer-dash:1.4.1'
+    implementation 'androidx.media3:media3-ui:1.4.1'
+}
+
+// Debug APK başarılı derlemeden sonra İndirilenler klasörüne kopyalanır.
+tasks.register("copyDebugApkToDownload") {
+    doLast {
+        def apk = layout.buildDirectory.file("outputs/apk/debug/app-debug.apk").get().asFile
+        def destination = new File("/sdcard/Download/ISA-TV-HD.apk")
+        if (!apk.isFile()) throw new GradleException("APK bulunamadı: " + apk)
+        destination.parentFile.mkdirs()
+        java.nio.file.Files.copy(apk.toPath(), destination.toPath(),
+            java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        println("APK kopyalandı: " + destination)
+    }
+}
+tasks.matching { it.name == "assembleDebug" }.configureEach {
+    finalizedBy("copyDebugApkToDownload")
+}
+
+
+=================================================================
+DOSYA: app/src/main/assets/isa-tv-hd/index.html
+=================================================================
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#090b10">
+<title>İSA TV HD</title>
+<link rel="stylesheet" href="css/isa-style.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="homepage">
+
+<img class="isa-tv-brand-mark" src="assets/logo.png" alt="İSA TV HD">
+
+<header class="isa-header">
+    <button id="isa-refresh" class="isa-refresh" type="button" aria-label="Yenile">
+        <i class="fas fa-rotate"></i>
+        <span>Yenile</span>
+    </button>
+    <div class="isa-header-title">
+        <span class="isa-live-dot"></span>
+        <strong>İSA TV HD</strong>
+    </div>
+    <button id="isa-toggle-source-form" class="isa-action isa-source-toggle isa-header-source-toggle" type="button">＋ Liste ekle</button>
+</header>
+
+<main class="isa-main">
+
+    <section id="isa-live-panel" class="isa-panel active">
+        <div class="isa-section-heading">
+            <div>
+                <span class="isa-eyebrow">CANLI YAYIN</span>
+                
+                <p id="isa-live-status">Kanallar yükleniyor...</p>
+            </div>
+        </div>
+
+        <div class="isa-source-section isa-source-compact">
+            <div id="isa-saved-lists"></div>
+            <div id="isa-source-form" hidden>
+                <label class="isa-field-label" for="isa-source-type">Kaynak türü</label>
+                <select id="isa-source-type" class="isa-source-select">
+                    <option value="">Kaynak türünü seçin</option><option value="m3u">M3U</option><option value="xtream">Xtream Codes</option><option value="mag">MAG</option>
+                </select>
+                <div id="isa-source-fields"></div>
+                <button id="isa-source-add" class="isa-action isa-source-add"><i class="fas fa-plus"></i> Kaynağı ekle</button>
+                <div class="isa-file-row"><label for="isa-m3u-file" class="isa-file-button"><i class="fas fa-folder-open"></i> M3U dosyası seç</label><input id="isa-m3u-file" type="file" accept=".m3u,.m3u8,.txt"></div>
+                <div id="isa-upload-status" aria-live="polite"></div>
+            </div>
+        </div>
+
+        <div id="isa-source-loading" class="isa-source-loading"
+             aria-live="polite">
+            <div class="isa-spinner"></div>
+            <strong>İçerik yükleniyor / indiriliyor</strong>
+            <div class="isa-load-track" aria-hidden="true"><span></span></div>
+            <small id="isa-loading-text">Lütfen bekleyin...</small>
+        </div>
+
+        <button id="isa-favorites-toggle" class="isa-favorites-toggle" type="button" style="display:none" aria-expanded="false">♥ Favoriler ▾</button>
+        <section id="isa-favorites-section" class="isa-favorites-section" hidden>
+            <div id="isa-favorites-grid" class="channels-grid"></div>
+        </section>
+        <div class="isa-channel-heading"><h2><i class="fas fa-satellite-dish"></i> Kanallar</h2></div>
+
+        <div id="all-channels">
+            <p class="isa-loading">Kanallar hazırlanıyor...</p>
+        </div>
+    </section>
+
+    <section id="isa-lists-panel" class="isa-panel">
+        <div class="isa-section-heading">
+            <div>
+                <span class="isa-eyebrow">KAYNAK YÖNETİMİ</span>
+                <h1>Listeler</h1>
+                <p>Eklediğiniz bütün M3U, Xtream ve MAG kaynakları.</p>
+            </div>
+        </div>
+        <div id="isa-all-saved-lists"></div>
+    </section>
+
+    <section id="isa-films-panel" class="isa-panel">
+        <div class="isa-section-heading"><div><span class="isa-eyebrow">VİDEO ARŞİVİ</span><h1>Filmler</h1><p>Film içerikleri bu bölümde gösterilecek.</p></div></div>
+        <div id="isa-films-content" class="isa-empty-state">Henüz film içeriği yüklenmedi.</div>
+    </section>
+
+    <section id="isa-series-panel" class="isa-panel">
+        <div class="isa-section-heading"><div><span class="isa-eyebrow">VİDEO ARŞİVİ</span><h1>Diziler</h1><p>Dizi, sezon ve bölümler bu bölümde gösterilecek.</p></div></div>
+        <div id="isa-series-content" class="isa-empty-state">Henüz dizi içeriği yüklenmedi.</div>
+    </section>
+
+    <section id="isa-flix-panel" class="isa-panel">
+        <div id="isa-flix-app">
+            <div class="isaf-progress-screen"><div class="isaf-progress-title">İçerikler indiriliyor</div><div class="isaf-progress-track"><div class="isaf-progress-fill" style="width:0%"></div></div><div class="isaf-progress-percent">0%</div></div>
+        </div>
+    </section>
+
+</main>
+
+<nav class="isa-bottom-nav" aria-label="Ana menü">
+    <button class="isa-tab active" data-tab="isa-live-panel"><i class="fas fa-tv"></i><span>Canlı TV</span></button>
+    <button class="isa-tab" data-tab="isa-films-panel"><i class="fas fa-film"></i><span>Filmler</span></button>
+    <button class="isa-tab" data-tab="isa-series-panel"><i class="fas fa-clapperboard"></i><span>Diziler</span></button>
+    <button class="isa-tab isa-flix-tab" data-tab="isa-flix-panel"><i class="fas fa-play"></i><span>İSA Flix</span></button>
+</nav>
+
+<script src="js/isa-sources.js"></script>
+<script src="js/tr-translation.js"></script>
+</body>
+</html>
