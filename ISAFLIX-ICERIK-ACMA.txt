@@ -1,0 +1,227 @@
+
+        card.append(name,small);
+        card.onclick = () => isaFlixOpenItem(item, i);
+        fragment.appendChild(card);
+    }
+
+    grid.appendChild(fragment);
+    isaFlixState.shown = end;
+
+    status.textContent =
+        end.toLocaleString('tr-TR') + ' / ' +
+        items.length.toLocaleString('tr-TR') + ' içerik gösteriliyor.';
+
+    more.hidden = end >= items.length;
+}
+
+function isaFlixOpenItem(item) {
+    const mode = isaFlixState.mode;
+
+    if (mode === 'live') {
+        const data = isaFlixCatalog();
+        const category = isaFlixCategory(item,'live');
+        const queue = isaFlixArray(data.live_channels)
+            .filter(x => isaFlixCategory(x,'live') === category)
+            .filter(x => /^https?:\/\//i.test(String(x.stream_url||'')))
+            .map(x => ({
+                name:x.name || 'Kanal',
+                url:x.stream_url,
+                logo:x.logo_url || x.image_url || x.poster_url || '',
+                group:category,
+                headers:isaFlixHeaders(x),
+                is_live:true
+            }));
+
+        const index = queue.findIndex(x => x.url === item.stream_url);
+        if (index >= 0) play(queue[index],queue,index,true);
+        else alert('Bu kanal için geçerli yayın bağlantısı bulunamadı.');
+        return;
+    }
+
+    if (mode === 'movies') {
+        const url = item.stream_url || item.page_url || item.url || '';
+        if (!/^https?:\/\//i.test(url)) {
+            alert('Bu film için geçerli bağlantı bulunamadı.');
+            return;
+        }
+        if (!item.stream_url && !isDirectMedia(url)) {
+            openIsaFlixVODItem({
+                name:item.title || item.name || 'Film',
+                title:item.title || item.name || 'Film',
+                url:url,
+                page_url:url,
+                poster:item.poster_url || item.image_url || '',
+                logo:item.poster_url || item.image_url || '',
+                headers:isaFlixHeaders(item),
+                queue:[],
+                queueIndex:0
+            });
+            return;
+        }
+
+        const queue = isaFlixArray(isaFlixState.items)
+            .filter(x => /^https?:\/\//i.test(String(x.stream_url || '')))
+            .map(x => ({
+                name:cleanMediaTitle(x.title || x.name || 'Film'),
+                url:x.stream_url,
+                logo:x.poster_url || x.image_url || '',
+                group:isaFlixCategory(x,'movies'),
+                headers:isaFlixHeaders(x),
+                season:0,
+                episode:0,
+                is_live:false
+            }));
+
+        let queueIndex = queue.findIndex(x =>
+            x.url === url &&
+            x.name === cleanMediaTitle(item.title || item.name || 'Film')
+        );
+        if (queueIndex < 0) {
+            queueIndex = queue.findIndex(x => x.url === url);
+        }
+
+        if (queueIndex < 0) {
+            alert('Film oynatma listesine eklenemedi.');
+            return;
+        }
+
+        openIsaFlixVODItem({
+            name:item.title || item.name || 'Film',
+            title:item.title || item.name || 'Film',
+            url,
+            videoUrl:url,
+            poster:item.poster_url || item.image_url || '',
+            logo:item.poster_url || item.image_url || '',
+            headers:isaFlixHeaders(item),
+            referer:item.referer || '',
+            queue:queue,
+            queueIndex:queueIndex
+        });
+        return;
+    }
+
+    isaFlixShowSeries(item);
+}
+
+async function isaFlixLoadWebSeries(series) {
+                isaFlixExplicitSeasonNumber(episode) ||
+                (Number(number) > 0 ? Number(number) : 0);
+
+            const episodeNumber = isaFlixExplicitEpisodeNumber(episode);
+
+            if (!/^https?:\/\//i.test(url) && isHttp(episode.page_url)) {
+                const note = document.createElement('p');
+                note.className = 'isa-vod-note';
+                note.textContent = 'Video hazırlanıyor...';
+                root.prepend(note);
+
+                resolveStaticMedia(episode.page_url)
+                    .then(resolved => {
+                        note.remove();
+                        const playbackUrl = resolved || episode.page_url;
+
+                        const showName = cleanMediaTitle(seriesTitle);
+                        const entry = {
+                            name: showName,
+                            url: playbackUrl,
+                            headers: {Referer: episode.page_url},
+                            season: seasonNumber,
+                            episode: episodeNumber,
+                            is_live: false,
+                            is_series: true,
+                            series_id: series.id || series.series_id || series.page_url,
+                            series_name: showName,
+                            series_url: series.page_url || ''
+                        };
+
+                        playIsaFlix(showName, playbackUrl, entry.headers, [entry], 0);
+                    })
+                    .catch(error => {
+                        note.remove();
+                        console.warn('Bölüm bağlantısı:', error);
+
+                        const showName = cleanMediaTitle(seriesTitle);
+                        const entry = {
+                            name: showName,
+                            url: episode.page_url,
+                            headers: {Referer: episode.page_url},
+                            season: seasonNumber,
+                            episode: episodeNumber,
+                            is_live: false,
+                            is_series: true,
+                            series_id: series.id || series.series_id || series.page_url,
+                            series_name: showName,
+                            series_url: series.page_url || ''
+                        };
+
+                        playIsaFlix(
+                            showName,
+                            episode.page_url,
+                            entry.headers,
+                            [entry],
+                            0
+                        );
+                    });
+
+                return;
+            }
+
+            if (!/^https?:\/\//i.test(url)) {
+                alert('Bu bölüm için geçerli yayın bağlantısı bulunamadı.');
+                return;
+            }
+
+            const allEpisodes = isaFlixArray(series.episodes)
+                .map(ep => ({
+                    ...ep,
+                    __season: isaFlixExplicitSeasonNumber(ep),
+                    __episode: isaFlixExplicitEpisodeNumber(ep)
+                }))
+                .filter(ep => /^https?:\/\//i.test(String(ep.stream_url || '')))
+                .sort((a, b) =>
+                    a.__season - b.__season ||
+                    a.__episode - b.__episode
+                );
+
+            const showName = cleanMediaTitle(seriesTitle);
+
+            const queue = allEpisodes.map(ep => ({
+                name: showName,
+                url: ep.stream_url,
+                logo: ep.image_url || series.poster_url || series.image_url || '',
+                group: series.platform_name || 'Diziler',
+                headers: isaFlixHeaders(ep),
+                season: ep.__season,
+                episode: ep.__episode,
+                is_live: false
+            }));
+
+            let index = queue.findIndex(x =>
+                x.url === url &&
+                x.season === seasonNumber &&
+                x.episode === episodeNumber
+            );
+
+            if (index < 0) index = queue.findIndex(x => x.url === url);
+
+            if (index < 0) {
+                alert('Bölüm oynatma listesine eklenemedi.');
+                return;
+            }
+
+            playIsaFlix(
+                showName,
+                url,
+                isaFlixHeaders(episode),
+                queue,
+                index
+            );
+        };
+    });
+}
+
+window.addEventListener('isa:catalog-catalog-updated', event => {
+    const data = event.detail;
+    if (!data || typeof data !== 'object') return;
+    if (isaFlixRoot()) isaFlixRender();
+});
