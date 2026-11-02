@@ -1,0 +1,20 @@
+app/src/main/assets/isa-tv-hd/js/isa-sources.js:608:function playIsaFlix(name, url, headers={}, queue=[], index=0) {
+app/src/main/assets/isa-tv-hd/js/isa-sources.js:632:        typeof window.ISATV.playIsaflix === 'function') {
+app/src/main/assets/isa-tv-hd/js/isa-sources.js:633:        window.ISATV.playIsaflix(
+app/src/main/assets/isa-tv-hd/js/isa-sources.js:1753:async function resolveStaticMedia(page, depth=0, visited=new Set()) {
+app/src/main/assets/isa-tv-hd/js/isa-sources.js:1799:            const found = await resolveStaticMedia(
+app/src/main/assets/isa-tv-hd/js/isa-sources.js:1851:        const resolved = await resolveStaticMedia(page);
+app/src/main/assets/isa-tv-hd/js/isa-sources.js:1901:        playIsaFlix(name, media, headers, item.queue || [], item.queueIndex || 0);
+app/src/main/assets/isa-tv-hd/js/isa-sources.js:1921:        const resolved = await resolveStaticMedia(page);
+app/src/main/assets/isa-tv-hd/js/isa-sources.js:1928:        playIsaFlix(
+app/src/main/assets/isa-tv-hd/js/isa-sources.js:2468:    {id:'hdfilmizle-live',url:'https://www.hdfilmizle.live/',kind:'movie'},
+app/src/main/assets/isa-tv-hd/js/isa-sources.js:2469:    {id:'fullhdfilmizlesene',url:'https://www.fullhdfilmizlesene.now/',kind:'movie'},
+app/src/main/assets/isa-tv-hd/js/isa-sources.js:2595:async function isaFlixDiscoverWebCatalog() {
+app/src/main/assets/isa-tv-hd/js/isa-sources.js:3191:                resolveStaticMedia(episode.page_url)
+app/src/main/assets/isa-tv-hd/js/isa-sources.js:3210:                        playIsaFlix(showName, playbackUrl, entry.headers, [entry], 0);
+app/src/main/assets/isa-tv-hd/js/isa-sources.js:3230:                        playIsaFlix(
+app/src/main/assets/isa-tv-hd/js/isa-sources.js:3285:            playIsaFlix(
+app/src/main/assets/isa-tv-hd/js/isa-sources.js:3340:    isaFlixDiscoverWebCatalog();
+app/src/main/java/com/isatvhd/player/MainActivity.java:138:        button.setText("URL TEST");
+app/src/main/java/com/isatvhd/player/MainActivity.java:164:                    .setTitle("İSA TV HD - URL TEST")
+app/src/main/java/com/isatvhd/player/MainActivity.java:294:        public void playIsaflix(
