@@ -1,0 +1,141 @@
+875:                const categories = await xtreamAPI(
+876:                    item, 'get_live_categories'
+880:                    (Array.isArray(categories) ? categories : []).map(c =>
+881:                        [String(c.category_id), c.category_name || 'Genel']
+1170:            'get_live_categories'
+1452:                xtreamAPI(provider,'get_vod_categories').catch(() => []),
+1453:                xtreamAPI(provider,'get_series_categories').catch(() => [])
+1458:                filmMap.set(String(category.category_id),category.category_name || 'Filmler');
+1462:                seriesMap.set(String(category.category_id),category.category_name || 'Diziler');
+1912:    const root = isaFlixRoot();
+2062:    const auth = await xtreamAPI(source, 'get_live_categories');
+2288:        let items = [], categories = new Map();
+2291:            const catAction = kind === 'film' ? 'get_vod_categories' : 'get_series_categories';
+2293:            for (const c of (Array.isArray(cats)?cats:[])) categories.set(String(c.category_id),c.category_name || 'Genel');
+2297:                category:categories.get(String(x.category_id)) || 'Genel',
+2452:const isaFlixState = {
+2580:                category_name:type === 'series' ? 'Diziler' : 'Filmler',
+2683:function isaFlixCategory(item, mode) {
+2684:    if (mode === 'live') return isaFlixText(item.category_name, 'Genel');
+2685:    if (mode === 'movies') return isaFlixText(item.category_name, 'Diğer');
+2686:    return isaFlixText(item.platform_name || item.category_name, 'Diğer');
+2691:    if (mode === 'live') source = isaFlixArray(data.live_categories);
+2692:    if (mode === 'movies') source = isaFlixArray(data.movie_categories);
+2698:            isaFlixCategory(x, mode)
+2704:function isaFlixRoot() {
+2713:function isaFlixRender() {
+2714:    const root = isaFlixRoot();
+2737:                    class="${isaFlixState.mode===id?'active':''}">
+2744:                placeholder="İçerik ara..." value="${esc(isaFlixState.query)}">
+2748:        <div id="isaf-grid" class="isaf-grid"></div>
+2756:            isaFlixState.mode = button.dataset.isafMode;
+2757:            isaFlixState.category = '';
+2758:            isaFlixState.query = '';
+2759:            isaFlixState.series = null;
+2760:            isaFlixRender();
+2767:        isaFlixState.query = search.value;
+2768:        isaFlixRenderItems();
+2771:    isaFlixRenderItems();
+2774:function isaFlixRenderItems() {
+2776:    const grid = document.getElementById('isaf-grid');
+2781:    const mode = isaFlixState.mode;
+2782:    const query = isaFlixState.query.trim().toLocaleLowerCase('tr');
+2783:    const category = isaFlixState.category;
+2791:            item.name, item.title, item.category_name,
+2798:    isaFlixState.items = items;
+2799:    isaFlixState.shown = 0;
+2817:    const grid = document.getElementById('isaf-grid');
+2822:    const items = isaFlixState.items;
+2823:    const start = isaFlixState.shown;
+2824:    const end = Math.min(start + isaFlixState.batch, items.length);
+2829:        const mode = isaFlixState.mode;
+2834:            ? isaFlixCategory(item,mode)
+2835:            : [item.year, isaFlixCategory(item,mode)].filter(Boolean).join(' · ');
+2867:    isaFlixState.shown = end;
+2877:    const mode = isaFlixState.mode;
+2881:        const category = isaFlixCategory(item,'live');
+2883:            .filter(x => isaFlixCategory(x,'live') === category)
+2921:        const queue = isaFlixArray(isaFlixState.items)
+2927:                group:isaFlixCategory(x,'movies'),
+2962:    isaFlixShowSeries(item);
+3072:function isaFlixShowSeries(series) {
+3073:    const root = isaFlixRoot();
+3082:            .then(() => isaFlixShowSeries(series))
+3086:                isaFlixShowSeries(series);
+3120:        document.getElementById('isaf-back').onclick = () => isaFlixRender();
+3124:    isaFlixShowEpisodes(series, 0, prepared);
+3128:function isaFlixShowEpisodes(series, number, episodes) {
+3129:    const root = isaFlixRoot();
+3170:        isaFlixState.mode = 'series';
+3171:        isaFlixRender();
+3299:    if (isaFlixRoot()) isaFlixRender();
+3314:        isaFlixRender();
+
+1266: * Dizi nesnesinin episodes/seasons yapısı kaybolmaz.
+1284:    const episodes = Array.isArray(data.episodes) ? data.episodes : [];
+1285:    const seasons = Array.isArray(data.seasons) ? data.seasons : [];
+1288:    if (title && (url || episodes.length || seasons.length || items.length ||
+1306:            episodes:episodes,
+1307:            seasons:seasons,
+1325:    return (Array.isArray(item.episodes) && item.episodes.length > 0) ||
+1326:           (Array.isArray(item.seasons) && item.seasons.length > 0) ||
+1498:                    ...item,title:item.name,logo:item.logo,episodes:[],seasons:[],type:'film'
+1524:            series_id:series.series_id
+1527:        const rawEpisodes = info.episodes || {};
+1528:        const seasons = info.seasons || [];
+1529:        const episodes = [];
+1532:            for (const episode of rawEpisodes) episodes.push(episode);
+1535:                if (Array.isArray(list)) { for (const episode of list) episodes.push(episode); }
+1541:        for (const episode of episodes) {
+1543:                episode.season || episode.season_number || 1
+1610:    const explicit = item.season_number ?? item.season;
+1635:    let episodes = series.episodes || [];
+1636:    const seasons = series.seasons || [];
+1638:    if (seasons.length) {
+1639:        const grouped = seasons.map((season,index) => ({
+1641:            episodes:season.episodes||[]
+1655:                        <small>${season.episodes.length} bölüm</small>
+1665:                grouped[Number(button.dataset.season)].episodes,
+1674:    if (!episodes.length) episodes = series.items || [];
+1676:    if (!episodes.length) {
+1690:    episodes.forEach(episode => {
+1720:        showEpisodes(episodes,series,provider);
+1724:function showEpisodes(episodes,series,provider) {
+1729:            <button class="isa-back" id="isa-episodes-back">
+1735:            ${episodes.map((episode,index) => `
+1745:    document.getElementById('isa-episodes-back').onclick = () => showSeries(series,provider);
+1748:        button.onclick = () => openVODItem(episodes[Number(button.dataset.episode)]);
+2324:    const id = item.raw && item.raw.series_id;
+2328:    const info = await xtreamAPI(item.source,'get_series_info',{series_id:id});
+2329:    const eps = info && info.episodes ? info.episodes : {};
+2337:        for (const ep of list) maxSeason = Math.max(maxSeason,Number(ep.season||ep.season_number||0)||0);
+2339:    const seasons = Array.isArray(info.seasons) ? info.seasons : [];
+2340:    for (const season of seasons) maxSeason = Math.max(maxSeason,Number(season.season_number||season.season||0)||0);
+2353:            if (!card || !item || !item.raw || !item.raw.series_id) continue;
+2394:        const info=await xtreamAPI(source,'get_series_info',{series_id:series.raw.series_id});
+2395:        const raw=info.episodes||{}, all=[];
+2398:        const seasons=new Map();
+2400:            const sn=Number(ep.season||ep.season_number||1);
+2401:            if(!seasons.has(sn)) seasons.set(sn,[]);
+2403:            seasons.get(sn).push({name:(Number(ep.episode_num||ep.episode_number||seasons.get(sn).length+1))+'. Bölüm',season:sn,episode:Number(ep.episode_num||ep.episode_number||seasons.get(sn).length+1),url:source.host.replace(/\/+$/,'')+'/series/'+encodeURIComponent(source.username)+'/'+encodeURIComponent(source.password)+'/'+ep.id+'.'+ext});
+2405:        const nums=Array.from(seasons.keys()).sort((a,b)=>a-b);
+2406:        root.innerHTML=`<div class="isa-vod-toolbar"><button class="isa-back" data-series-back>Kategoriler</button><h2>${esc(series.name)}</h2></div><div class="isa-provider-grid">${nums.map((n,i)=>`<button class="isa-provider-card" data-season="${i}"><strong>Sezon ${n}</strong><small>${seasons.get(n).length} bölüm</small></button>`).join('')}</div>`;
+2409:            const episodes=seasons.get(nums[Number(b.dataset.season)]);
+2410:            root.innerHTML=`<div class="isa-vod-toolbar"><button class="isa-back" data-episode-back>Sezonlar</button><h2>${esc(series.name)} · Sezon ${nums[Number(b.dataset.season)]}</h2></div><div class="isa-provider-grid">${episodes.map((ep,i)=>`<button class="isa-provider-card" data-ep="${i}"><i class="fas fa-circle-play" style="font-size:28px;padding:14px"></i><strong>${esc(ep.name)}</strong><small>Bölümü oynat</small></button>`).join('')}</div>`;
+2412:            root.querySelectorAll('[data-ep]').forEach(x=>x.onclick=()=>{const ep=episodes[Number(x.dataset.ep)];const queue=episodes.map((e,i)=>({name:cleanMediaTitle(series.name),url:e.url,group:category,season:e.season,episode:e.episode,headers:{}})); const idx=Number(x.dataset.ep); play(queue[idx],queue,idx,false);});
+2587:                episodes:[]
+2974:    const episodes = [];
+3005:            episode.season_number = isaFlixExplicitSeasonNumber(episode);
+3006:            episode.episode_number = isaFlixExplicitEpisodeNumber(episode);
+3008:            episodes.push(episode);
+3012:    series.episodes = episodes;
+3016:    const raw = item.season_number ?? item.season;
+3045:    const raw = item.episode_number ?? item.episode ?? item.episode_num;
+3076:    const episodes = isaFlixArray(series.episodes);
+3078:    if (!episodes.length && series.page_url && !series.__webEpisodesLoaded) {
+3091:    const prepared = episodes.map((episode, index) => ({
+3128:function isaFlixShowEpisodes(series, number, episodes) {
+3132:    const sortedEpisodes = [...episodes].sort((a, b) => {
+3205:                            series_id: series.id || series.series_id || series.page_url,
+3225:                            series_id: series.id || series.series_id || series.page_url,
+3247:            const allEpisodes = isaFlixArray(series.episodes)
