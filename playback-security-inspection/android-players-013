@@ -1,0 +1,160 @@
+                playerView.setPlayer(player);
+
+                player.setVolume(1f);
+                player.setTrackSelectionParameters(
+                        player.getTrackSelectionParameters()
+                                .buildUpon()
+                                .setMaxVideoBitrate(Integer.MAX_VALUE)
+                                .build()
+                );
+
+                player.setPlayWhenReady(true);
+
+                recyclePlayer(oldActive);
+
+            } else {
+                // Hazır değilse mevcut aktif oynatıcıyla aç.
+                prepareChannel(player, selectedIndex, false);
+            }
+
+            setTitle(channel.name);
+            status.setVisibility(View.GONE);
+
+            // Önceden hazırlanmış oynatıcı READY olmuş olabilir.
+            int activeState = player.getPlaybackState();
+
+            if (activeState == Player.STATE_READY) {
+                loadingSpinner.setVisibility(View.GONE);
+            } else if (activeState == Player.STATE_BUFFERING ||
+                       activeState == Player.STATE_IDLE) {
+                loadingSpinner.setVisibility(View.VISIBLE);
+            }
+
+            applyPreloadPolicy();
+
+        } catch (Exception e) {
+            Log.e(TAG, "Kanal başlatılamadı", e);
+            loadingSpinner.setVisibility(View.GONE);
+        }
+    }
+
+
+
+    
+
+
+private boolean isPortraitMode() {
+    return getResources().getConfiguration().orientation
+            == Configuration.ORIENTATION_PORTRAIT;
+}
+
+private boolean isTelevisionDevice() {
+    int type = getResources().getConfiguration().uiMode
+            & Configuration.UI_MODE_TYPE_MASK;
+
+    return type == Configuration.UI_MODE_TYPE_TELEVISION
+            || getPackageManager().hasSystemFeature(
+                    android.content.pm.PackageManager.FEATURE_LEANBACK
+            );
+}
+
+private boolean isPhoneDevice() {
+    if (isTelevisionDevice()) return false;
+
+    int smallestWidth =
+            getResources().getConfiguration().smallestScreenWidthDp;
+
+    if (smallestWidth > 0) {
+        return smallestWidth < 600;
+    }
+
+    float density = getResources().getDisplayMetrics().density;
+    float widthDp =
+            getResources().getDisplayMetrics().widthPixels / density;
+
+    return widthDp < 600;
+}
+
+private void stopNeighborPreloads() {
+    Iterator<Map.Entry<Integer, ExoPlayer>> iterator =
+            preloadedPlayers.entrySet().iterator();
+
+    while (iterator.hasNext()) {
+        ExoPlayer standby = iterator.next().getValue();
+        iterator.remove();
+        recyclePlayer(standby);
+    }
+}
+
+
+    // Komşu yayınları aç ve altı saniyelik sayaç başlat.
+    private void startNeighborPreloadsWithTimeout() {
+        handler.removeCallbacks(neighborPreloadTimeout);
+
+        neighborPreloadUnlocked = true;
+
+        if (portraitWarning != null) {
+            portraitWarning.setVisibility(View.GONE);
+        }
+
+        if (player != null && channels.size() >= 2) {
+            prepareNeighborChannels();
+        } else {
+            stopNeighborPreloads();
+        }
+
+        handler.postDelayed(neighborPreloadTimeout, 6000L);
+    }
+
+private void applyPreloadPolicy() {
+        startNeighborPreloadsWithTimeout();
+    }
+
+private boolean isCurrentChannelFavorite() {
+    if (selectedIndex < 0 || selectedIndex >= channels.size()) return false;
+
+    String url = channels.get(selectedIndex).url;
+    try {
+        JSONArray favorites = new JSONArray(
+                getSharedPreferences("isa_tv_data", MODE_PRIVATE)
+                        .getString("favorites", "[]"));
+
+        for (int i = 0; i < favorites.length(); i++) {
+            JSONObject item = favorites.optJSONObject(i);
+            if (item != null && url.equals(item.optString("url", ""))) {
+                return true;
+            }
+        }
+    } catch (Exception e) {
+        Log.e(TAG, "Favoriler okunamadı", e);
+    }
+    return false;
+}
+
+private void updatePortraitOverlay() {
+    if (portraitChannelName == null || favoriteButton == null) return;
+
+    boolean portrait = isPortraitMode();
+    if (portraitPanel != null) portraitPanel.setVisibility(portrait ? View.VISIBLE : View.GONE);
+
+    portraitChannelName.setVisibility(portrait ? View.VISIBLE : View.GONE);
+    boolean liveItem = selectedIndex >= 0 && selectedIndex < channels.size()
+            && channels.get(selectedIndex).isLive;
+    portraitLiveBadge.setVisibility(portrait && liveItem ? View.VISIBLE : View.GONE);
+    if (portraitEpisodeInfo != null) portraitEpisodeInfo.setVisibility(portrait ? View.VISIBLE : View.GONE);
+    favoriteButton.setVisibility(portrait ? View.VISIBLE : View.GONE);
+
+    if (!portrait) return;
+
+    if (selectedIndex >= 0 && selectedIndex < channels.size()) {
+        Channel channel = channels.get(selectedIndex);
+        portraitChannelName.setText(
+                channel.name == null ? "İSA TV HD" : channel.name);
+        if (portraitEpisodeInfo != null) {
+            if (channel.season > 0 || channel.episode > 0) {
+                String label = (channel.season > 0 ? "Sezon " + channel.season : "") +
+                        (channel.episode > 0 ? "  ·  " + channel.episode + ". Bölüm" : "");
+                portraitEpisodeInfo.setText(label.trim());
+                portraitEpisodeInfo.setVisibility(View.VISIBLE);
+            } else portraitEpisodeInfo.setVisibility(View.GONE);
+        }

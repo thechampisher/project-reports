@@ -1,0 +1,44 @@
+ M app/src/main/assets/isa-tv-hd/css/isa-style.css
+ M app/src/main/assets/isa-tv-hd/index.html
+ M app/src/main/assets/isa-tv-hd/js/isa-sources.js
+ M app/src/main/java/com/isatvhd/player/MainActivity.java
+ M app/src/main/java/com/isatvhd/player/PlayerActivity.java
+?? INCELEME/ISAFLIX-AKTIF-AKIS.txt
+?? INCELEME/ISAFLIX-BAGLANTILAR.txt
+?? INCELEME/ISAFLIX-JSON-SCHEMA.txt
+?? INCELEME/ISAFLIX-SON-BAGIMLILIK.txt
+?? app/src/main/assets/isa-tv-hd/css/isa-style.css.before-broadcast-20261105-181931
+?? app/src/main/assets/isa-tv-hd/css/isa-style.css.before-member-login-20261105-173704
+?? app/src/main/assets/isa-tv-hd/index.html.before-broadcast-20261105-181931
+?? app/src/main/assets/isa-tv-hd/index.html.before-muted-broadcast-20261105-194741
+?? app/src/main/assets/isa-tv-hd/js/isa-sources.js.before-broadcast-20261105-181931
+?? app/src/main/assets/isa-tv-hd/js/isa-sources.js.before-broadcast-final-20261105-182433
+?? app/src/main/assets/isa-tv-hd/js/isa-sources.js.before-callback-fix-20261105-182108
+?? app/src/main/assets/isa-tv-hd/js/isa-sources.js.before-cleanup
+?? app/src/main/assets/isa-tv-hd/js/isa-sources.js.before-member-access-20261105-210449
+?? app/src/main/assets/isa-tv-hd/js/isa-sources.js.before-member-login-20261105-173704
+?? app/src/main/assets/isa-tv-hd/js/isa-sources.js.before-mini-broadcast-20261105-184948
+?? app/src/main/assets/isa-tv-hd/js/isa-sources.js.before-mini-player-20261105-191338
+?? app/src/main/assets/isa-tv-hd/js/isa-sources.js.before-muted-broadcast-20261105-194741
+?? app/src/main/assets/isa-tv-hd/js/isa-sources.js.before-poll-generation-20261105-210805
+?? app/src/main/java/com/isatvhd/player/MainActivity.java.before-all-json
+?? app/src/main/java/com/isatvhd/player/MainActivity.java.before-broadcast-20261105-181931
+?? app/src/main/java/com/isatvhd/player/MainActivity.java.before-broadcast-final-20261105-182433
+?? app/src/main/java/com/isatvhd/player/MainActivity.java.before-callback-fix-20261105-182108
+?? app/src/main/java/com/isatvhd/player/MainActivity.java.before-central-player-fix-20261105-204338
+?? app/src/main/java/com/isatvhd/player/MainActivity.java.before-cleanup
+?? app/src/main/java/com/isatvhd/player/MainActivity.java.before-content-update
+?? app/src/main/java/com/isatvhd/player/MainActivity.java.before-member-access-20261105-210449
+?? app/src/main/java/com/isatvhd/player/MainActivity.java.before-member-login-20261105-173704
+?? app/src/main/java/com/isatvhd/player/MainActivity.java.before-mini-broadcast-20261105-184948
+?? app/src/main/java/com/isatvhd/player/MainActivity.java.before-mini-player-20261105-191338
+?? app/src/main/java/com/isatvhd/player/MainActivity.java.before-muted-broadcast-20261105-194741
+?? app/src/main/java/com/isatvhd/player/MainActivity.java.before-onresume-fix-20261105-182823
+?? app/src/main/java/com/isatvhd/player/MainActivity.java.before-syntax-repair-20261105-195301
+?? app/src/main/java/com/isatvhd/player/MainActivity.java.before-texture-fix-20261105-214918
+?? app/src/main/java/com/isatvhd/player/PlayerActivity.java.before-broadcast-20261105-181931
+
+origin	https://github.com/thechampisher/r8m4q2v9c7.git (fetch)
+origin	https://github.com/thechampisher/r8m4q2v9c7.git (push)
+
+672c5d0 Connect ISAFLIX to repository catalog and remove URL tests

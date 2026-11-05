@@ -1,0 +1,160 @@
+
+function bearer(request) {
+  const value = request.headers.get("Authorization") || "";
+  return value.startsWith("Bearer ") ? value.slice(7) : "";
+}
+
+async function readJson(request) {
+  try {
+    const length = Number(request.headers.get("Content-Length") || 0);
+    if (length > MAX_GITHUB_REQUEST_BYTES) return null;
+
+    const raw = await request.text();
+    if (encoder.encode(raw).length > MAX_GITHUB_REQUEST_BYTES) return null;
+
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function uuid() {
+  return crypto.randomUUID();
+}
+
+function nowSeconds() {
+  return Math.floor(Date.now() / 1000);
+}
+
+function normalizeExpiry(value) {
+  if (!value) return null;
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? time : null;
+}
+
+async function signingKey(env) {
+  if (!env.TOKEN_SIGNING_SECRET || env.TOKEN_SIGNING_SECRET.length < 32) {
+    throw new Error("TOKEN_SIGNING_SECRET must contain at least 32 characters");
+  }
+
+  return crypto.subtle.importKey(
+    "raw",
+    encoder.encode(env.TOKEN_SIGNING_SECRET),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign", "verify"]
+  );
+}
+
+async function createJwt(payload, env, lifetime) {
+  const header = b64url(encoder.encode(JSON.stringify({
+    alg: "HS256",
+    typ: "JWT"
+  })));
+
+  const body = b64url(encoder.encode(JSON.stringify({
+    ...payload,
+    iat: nowSeconds(),
+    exp: nowSeconds() + lifetime
+  })));
+
+  const input = `${header}.${body}`;
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    await signingKey(env),
+    encoder.encode(input)
+  );
+
+  return `${input}.${b64url(new Uint8Array(signature))}`;
+}
+
+async function verifyJwt(token, env) {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+
+    const input = `${parts[0]}.${parts[1]}`;
+    const signature = unb64url(parts[2]);
+
+    const valid = await crypto.subtle.verify(
+      "HMAC",
+      await signingKey(env),
+      signature,
+      encoder.encode(input)
+    );
+
+    if (!valid) return null;
+
+    const payload = JSON.parse(decoder.decode(unb64url(parts[1])));
+    if (!payload.exp || payload.exp <= nowSeconds()) return null;
+
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+async function hashPassword(password) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(password),
+    "PBKDF2",
+    false,
+    ["deriveBits"]
+  );
+
+  const result = await crypto.subtle.deriveBits({
+    name: "PBKDF2",
+    salt,
+    iterations: 100000,
+    hash: "SHA-256"
+  }, key, 256);
+
+  return `pbkdf2$100000$${b64url(salt)}$${b64url(new Uint8Array(result))}`;
+}
+
+async function checkPassword(password, stored) {
+  try {
+    const parts = stored.split("$");
+    if (parts.length !== 4 || parts[0] !== "pbkdf2") return false;
+
+    const iterations = Number(parts[1]);
+    if (!Number.isInteger(iterations) ||
+        iterations < 100000 ||
+        iterations > 100000) return false;
+
+    const salt = unb64url(parts[2]);
+    const expected = unb64url(parts[3]);
+
+    const key = await crypto.subtle.importKey(
+      "raw",
+      encoder.encode(password),
+      "PBKDF2",
+      false,
+      ["deriveBits"]
+    );
+
+    const actual = new Uint8Array(await crypto.subtle.deriveBits({
+      name: "PBKDF2",
+      salt,
+      iterations,
+      hash: "SHA-256"
+    }, key, 256));
+
+    if (actual.length !== expected.length) return false;
+
+    let diff = 0;
+    for (let i = 0; i < actual.length; i++) {
+      diff |= actual[i] ^ expected[i];
+    }
+
+    return diff === 0;
+  } catch {
+    return false;
+  }
+}
+
+async function adminAuth(request, env) {
+  const token = bearer(request);
+  if (!token) return null;

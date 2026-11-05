@@ -1,0 +1,160 @@
+        currentUrl,
+        env,
+        {
+          sid: payload.sid,
+          member_id: payload.member_id,
+          device_id: payload.device_id
+        }
+      );
+    } catch {
+      return respondJson({ ok: false, error: "Manifest rewrite failed" }, 502);
+    }
+
+    return new Response(rewritten, {
+      status: 200,
+      headers: mediaResponseHeaders(upstream, true, cors)
+    });
+  }
+
+  return new Response(upstream.body, {
+    status: upstream.status,
+    headers: mediaResponseHeaders(upstream, false, cors)
+  });
+}
+
+async function issuePlayback(env, member, deviceId, source, broadcastId = null) {
+  if (!source || source.status !== "active") {
+    return { error: "Stream unavailable" };
+  }
+
+  if (!allowedSource(source.source_url, env)) {
+    return { error: "Stream source is not permitted" };
+  }
+
+  const sid = uuid();
+  const ticket = await createMediaToken({
+    kind: "play",
+    url: source.source_url,
+    sid,
+    member_id: member.id,
+    device_id: deviceId,
+    broadcast_id: broadcastId
+  }, env, PLAYBACK_TICKET_SECONDS);
+
+  const ticketHash = await sha256(ticket);
+
+  // Oynatma bileti ve oturum aynı 12 saatlik süreyi kullanır.
+  const expiry = nowSeconds() + PLAYBACK_SESSION_SECONDS;
+
+  await env.DB.prepare(`
+    INSERT INTO playback_sessions
+      (id, member_id, device_id, stream_source_id, broadcast_id,
+       ticket_hash, status, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?, 'active', ?)
+  `).bind(
+    sid,
+    member.id,
+    deviceId,
+    source.id,
+    broadcastId,
+    ticketHash,
+    expiry
+  ).run();
+
+  return {
+    playback_url: `/play/${ticket}`,
+    expires_in: PLAYBACK_TICKET_SECONDS
+  };
+}
+
+/* =========================================================
+   LOGIN
+   ========================================================= */
+
+async function handleLogin(request, env, path) {
+  const body = await readJson(request);
+  if (!body) return json({ ok: false, error: "Invalid JSON" }, 400);
+
+  if (path === "/auth/admin/login") {
+    const password = String(body.password || "");
+
+    if (!env.ADMIN_LOGIN_PASSWORD ||
+        !equalText(password, env.ADMIN_LOGIN_PASSWORD)) {
+      return json({ ok: false, error: "Invalid credentials" }, 401);
+    }
+
+    const token = await createJwt({
+      role: "admin",
+      id: "admin"
+    }, env, ADMIN_TOKEN_SECONDS);
+
+    return json({
+      ok: true,
+      token,
+      expires_in: ADMIN_TOKEN_SECONDS
+    });
+  }
+
+  if (path === "/auth/member/login") {
+    const code = String(body.member_code || "").trim();
+    const password = String(body.password || "");
+    const deviceId = String(body.device_id || "").trim();
+    const deviceName = String(body.device_name || "Android").slice(0, 120);
+
+    if (!code || !password || !deviceId || deviceId.length > 180) {
+      return json({ ok: false, error: "Missing login fields" }, 400);
+    }
+
+    const member = await env.DB.prepare(`
+      SELECT *
+      FROM members
+      WHERE member_code = ?
+      LIMIT 1
+    `).bind(code).first();
+
+    if (!member ||
+        member.status !== "active" ||
+        !member.password_hash) {
+      return json({ ok: false, error: "Invalid credentials" }, 401);
+    }
+
+    const expiry = normalizeExpiry(member.expires_at);
+    if (expiry && expiry <= Date.now()) {
+      return json({ ok: false, error: "Membership expired" }, 403);
+    }
+
+    if (!await checkPassword(password, member.password_hash)) {
+      return json({ ok: false, error: "Invalid credentials" }, 401);
+    }
+
+    const existing = await env.DB.prepare(`
+      SELECT id, status
+      FROM devices
+      WHERE member_id = ? AND device_id = ?
+      LIMIT 1
+    `).bind(member.id, deviceId).first();
+
+    if (existing?.status === "blocked") {
+      return json({ ok: false, error: "Device blocked" }, 403);
+    }
+
+    const count = await env.DB.prepare(`
+      SELECT COUNT(*) AS total
+      FROM devices
+      WHERE member_id = ? AND status = 'active'
+    `).bind(member.id).first();
+
+    if (!existing && Number(count?.total || 0) >= Number(member.max_devices || 1)) {
+      return json({ ok: false, error: "Device limit reached" }, 403);
+    }
+
+    const token = await createJwt({
+      role: "member",
+      member_id: member.id,
+      device_id: deviceId
+    }, env, MEMBER_TOKEN_SECONDS);
+
+    const tokenHash = await sha256(token);
+    const deviceRecordId = existing?.id || uuid();
+
+    if (existing) {

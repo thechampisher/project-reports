@@ -1,0 +1,160 @@
+
+========== DOSYA: /data/data/com.termux/files/home/app-work/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java ==========
+19:import android.webkit.WebView;
+20:import android.webkit.WebViewClient;
+28:import androidx.media3.common.MediaItem;
+31:import androidx.media3.datasource.DefaultHttpDataSource;
+33:import androidx.media3.exoplayer.hls.HlsMediaSource;
+34:import androidx.media3.exoplayer.dash.DashMediaSource;
+35:import androidx.media3.exoplayer.source.MediaSource;
+36:import androidx.media3.exoplayer.source.MergingMediaSource;
+37:import androidx.media3.exoplayer.source.ConcatenatingMediaSource;
+38:import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+61:    private WebView webView;
+99:        String url = getIntent().getStringExtra("stream_url");
+340:        webView = new WebView(this);
+373:            public boolean onCreateWindow(WebView view, boolean dialog,
+379:        webView.setWebViewClient(new WebViewClient() {
+381:            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+395:            public boolean shouldOverrideUrlLoading(WebView view,
+416:                    WebView view, android.webkit.WebResourceRequest request) {
+424:                    WebView view, String url) {
+430:            public void onPageFinished(WebView view, String url) {
+439:        webView.loadUrl(pageUrl);
+556:                webView.loadUrl("about:blank");
+572:    private MediaSource createMediaSource(JSONObject entry) {
+602:        DefaultHttpDataSource.Factory factory =
+603:                new DefaultHttpDataSource.Factory()
+610:        MediaItem mediaItem = new MediaItem.Builder()
+628:            return new HlsMediaSource.Factory(factory)
+630:                    .createMediaSource(mediaItem);
+634:            return new DashMediaSource.Factory(factory)
+635:                    .createMediaSource(mediaItem);
+638:        return new DefaultMediaSourceFactory(factory)
+639:                .createMediaSource(mediaItem);
+644:            ArrayList<MediaSource> sources = new ArrayList<>();
+647:                MediaSource videoSource = createMediaSource(item);
+653:                    MediaSource audioSource = createMediaSource(audioItem);
+654:                    sources.add(new MergingMediaSource(true, videoSource, audioSource));
+687:                public void onMediaItemTransition(
+688:                        MediaItem mediaItem, int reason) {
+704:            MediaSource[] array = sources.toArray(new MediaSource[0]);
+705:            ConcatenatingMediaSource playlist =
+706:                    new ConcatenatingMediaSource(array);
+708:            player.setMediaSource(playlist);
+727:        int index = player.getCurrentMediaItemIndex();
+793:        int index = player == null ? 0 : player.getCurrentMediaItemIndex();
+826:        int index = player == null ? 0 : player.getCurrentMediaItemIndex();
+935:                if (player.hasNextMediaItem()) {
+936:                    player.seekToNextMediaItem();
+944:                if (player.hasPreviousMediaItem()) {
+945:                    player.seekToPreviousMediaItem();
+1002:            player.release();
+
+package com.isatvhd.player;
+
+import android.app.Activity;
+import android.os.Bundle;
+import android.graphics.Color;
+import android.graphics.BitmapFactory;
+import android.graphics.drawable.GradientDrawable;
+import android.content.res.Configuration;
+import android.net.Uri;
+import android.view.Gravity;
+import android.view.KeyEvent;
+import android.view.View;
+import android.view.WindowManager;
+import android.widget.Button;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.TextView;
+import android.widget.ProgressBar;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.webkit.WebChromeClient;
+import android.webkit.WebSettings;
+import android.webkit.CookieManager;
+import android.webkit.JavascriptInterface;
+
+
+import androidx.media3.common.C;
+import androidx.media3.common.MediaItem;
+import androidx.media3.common.PlaybackException;
+import androidx.media3.common.Player;
+import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.hls.HlsMediaSource;
+import androidx.media3.exoplayer.dash.DashMediaSource;
+import androidx.media3.exoplayer.source.MediaSource;
+import androidx.media3.exoplayer.source.MergingMediaSource;
+import androidx.media3.exoplayer.source.ConcatenatingMediaSource;
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+import androidx.media3.ui.PlayerView;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+
+public class IsaflixPlayerActivity extends Activity {
+
+    private ExoPlayer player;
+    private PlayerView playerView;
+    private FrameLayout root;
+    private TextView titleView;
+    private TextView episodeView;
+    private TextView status;
+    private Button favoriteButton;
+    private ProgressBar loadingSpinner;
+    private TextView loadingLabel;
+    private boolean resolvingCancelled = false;
+    private WebView webView;
+    private String websitePageUrl = "";
+    private boolean websitePlaybackMode = false;
+    private boolean websiteMediaAccepted = false;
+    private final java.util.LinkedHashSet<String> websiteMediaCandidates =
+            new java.util.LinkedHashSet<>();
+    private final android.os.Handler websiteHandler =
+            new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable websiteResolveRunnable =
+            this::finishWebsiteDetection;
+
+
+    private ImageView logo;
+    private final android.os.Handler infoHandler =
+            new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable hideEpisodeInfo = () -> {
+        if (episodeView != null
+                && getResources().getConfiguration().orientation
+                == Configuration.ORIENTATION_LANDSCAPE) {
+            episodeView.animate().alpha(0f).setDuration(250)
+                    .withEndAction(() -> episodeView.setVisibility(View.GONE))
+                    .start();
+        }
+    };
+
+    private final ArrayList<JSONObject> queue = new ArrayList<>();
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        getWindow().addFlags(
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        );
+        getWindow().setStatusBarColor(Color.BLACK);
+        getWindow().setNavigationBarColor(Color.BLACK);
+        applyImmersiveMode();
+
+        String url = getIntent().getStringExtra("stream_url");
+        if (url == null || !url.matches("(?i)^https?://.*")) {
+            finish();
+            return;
+        }
+
+        loadQueue(url);
+        createInterface();
+        if (isDirectMediaUrl(url)) {

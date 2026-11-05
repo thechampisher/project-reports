@@ -1,0 +1,160 @@
+
+      const payload = {
+        message,
+        content: btoa(Array.from(
+          encoder.encode(content),
+          byte => String.fromCharCode(byte)
+        ).join(""))
+      };
+
+      if (sha) payload.sha = sha;
+      // GitHub API varsayılan branch'i kullanır.
+      // İstemciden branch seçimi kabul edilmez.
+
+      const result = await githubRequest(
+        env,
+        `/repos/${repo}/contents/${encodedPath}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        }
+      );
+
+      await audit(env, "github_file_updated", path, { repo });
+
+      return json({
+        ok: true,
+        repository: repo,
+        path,
+        sha: result.content?.sha || null
+      });
+    } catch {
+      return json({ ok: false, error: "GitHub file update failed" }, 502);
+    }
+  }
+
+  return json({ ok: false, error: "GitHub endpoint not found" }, 404);
+}
+
+/* =========================================================
+   MEMBER API
+   ========================================================= */
+
+async function handleMember(request, env, path, method, auth) {
+  const member = auth.member;
+
+  if (method === "GET" && path === "/member/profile") {
+    return json({
+      ok: true,
+      member: {
+        id: member.id,
+        member_code: member.member_code,
+        display_name: member.display_name,
+        status: member.status,
+        expires_at: member.expires_at,
+        max_devices: member.max_devices
+      }
+    });
+  }
+
+  if (method === "GET" && path === "/member/messages") {
+    const result = await env.DB.prepare(`
+      SELECT id, title, body, created_at, expires_at
+      FROM messages
+      WHERE (member_id IS NULL OR member_id = ?)
+        AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+      ORDER BY created_at DESC
+      LIMIT 100
+    `).bind(member.id).all();
+
+    return json({ ok: true, messages: result.results || [] });
+  }
+
+  if (method === "GET" && path === "/member/streams") {
+    const result = await env.DB.prepare(`
+      SELECT id, name, source_type
+      FROM stream_sources
+      WHERE status = 'active'
+      ORDER BY name
+      LIMIT 500
+    `).all();
+
+    return json({ ok: true, streams: result.results || [] });
+  }
+
+  if (method === "GET" && path === "/member/broadcast") {
+    const result = await env.DB.prepare(`
+      SELECT b.id, b.title, b.message, b.started_at,
+             s.name AS stream_name
+      FROM broadcasts b
+      JOIN stream_sources s ON s.id = b.stream_source_id
+      WHERE b.status = 'live'
+        AND s.status = 'active'
+        AND EXISTS (
+          SELECT 1
+          FROM broadcast_recipients r
+          WHERE r.broadcast_id = b.id
+            AND r.member_id = ?
+            AND r.status IN ('targeted', 'authorized')
+        )
+      ORDER BY b.started_at DESC
+      LIMIT 20
+    `).bind(member.id).all();
+
+    return json({ ok: true, broadcasts: result.results || [] });
+  }
+
+  if (method === "POST" && path === "/member/playback") {
+    const body = await readJson(request);
+    if (!body) return json({ ok: false, error: "Invalid JSON" }, 400);
+
+    if (!body.broadcast_id) {
+      return json({
+        ok: false,
+        error: "An active broadcast is required"
+      }, 400);
+    }
+
+    let source;
+    const broadcastId = String(body.broadcast_id).trim();
+
+    if (!broadcastId || broadcastId.length > 180) {
+      return json({ ok: false, error: "Invalid broadcast ID" }, 400);
+    }
+
+    {
+
+      const broadcast = await env.DB.prepare(`
+        SELECT b.id, b.stream_source_id, b.audience,
+               s.id AS source_id, s.source_url, s.status AS source_status
+        FROM broadcasts b
+        JOIN stream_sources s ON s.id = b.stream_source_id
+        WHERE b.id = ? AND b.status = 'live'
+        LIMIT 1
+      `).bind(broadcastId).first();
+
+      if (!broadcast || broadcast.source_status !== "active") {
+        return json({ ok: false, error: "Broadcast unavailable" }, 404);
+      }
+
+      const recipient = await env.DB.prepare(`
+        SELECT id
+        FROM broadcast_recipients
+        WHERE broadcast_id = ?
+          AND member_id = ?
+          AND status IN ('targeted', 'authorized')
+        LIMIT 1
+      `).bind(broadcastId, member.id).first();
+
+      if (!recipient) {
+        return json({ ok: false, error: "Not authorized for broadcast" }, 403);
+      }
+
+      await env.DB.prepare(`
+        UPDATE broadcast_recipients
+        SET status = 'authorized', authorized_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).bind(recipient.id).run();
+
+      source = {

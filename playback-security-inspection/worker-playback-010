@@ -1,0 +1,160 @@
+
+  const text = await response.text();
+  let data;
+
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = {};
+  }
+
+  if (!response.ok) {
+    throw new Error(`GitHub API error ${response.status}`);
+  }
+
+  return data;
+}
+
+async function handleGithub(request, env, url, method) {
+  if (method === "GET" && url.pathname === "/admin/github/repos") {
+    const repos = [];
+
+    for (const repo of allowedGithubRepos(env)) {
+      try {
+        const info = await githubRequest(env, `/repos/${repo}`);
+        repos.push({
+          name: info.full_name,
+          private: info.private,
+          default_branch: info.default_branch
+        });
+      } catch {
+        repos.push({ name: repo, error: "Repository unavailable" });
+      }
+    }
+
+    return json({ ok: true, repos });
+  }
+
+  if (url.pathname === "/admin/github/file" && method === "GET") {
+    const repo = url.searchParams.get("repo") || "";
+    const path = cleanGithubPath(url.searchParams.get("path"));
+    const ref = url.searchParams.get("ref") || "";
+
+    if (!checkGithubRepo(repo, env) || !path) {
+      return json({ ok: false, error: "Invalid repository or path" }, 400);
+    }
+
+    try {
+      const query = ref ? `?ref=${encodeURIComponent(ref)}` : "";
+      const file = await githubRequest(
+        env,
+        `/repos/${repo}/contents/${path.split("/").map(encodeURIComponent).join("/")}${query}`
+      );
+
+      if (Array.isArray(file) || file.type !== "file" || !file.content) {
+        return json({ ok: false, error: "Not a regular file" }, 400);
+      }
+
+      const content = decoder.decode(unb64url(
+        b64url(Uint8Array.from(atob(file.content.replace(/\n/g, "")), c => c.charCodeAt(0)))
+      ));
+
+      return json({
+        ok: true,
+        repository: repo,
+        path,
+        sha: file.sha,
+        size: file.size,
+        content
+      });
+    } catch {
+      return json({ ok: false, error: "GitHub file read failed" }, 502);
+    }
+  }
+
+  if (url.pathname === "/admin/github/chunk" && method === "PUT") {
+    const body = await readJson(request);
+    if (!body) return json({ ok: false, error: "Invalid JSON" }, 400);
+
+    const repo = String(body.repo || "");
+    const path = cleanGithubPath(body.path);
+    const contentBase64 = String(body.contentBase64 || "");
+    const message = String(body.message || "Upload file part");
+
+    if (!checkGithubRepo(repo, env) ||
+        !path ||
+        !isGithubPathWritable(path) ||
+        !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(contentBase64) ||
+        Math.floor(contentBase64.length * 3 / 4) > MAX_GITHUB_CHUNK_BYTES) {
+      return json({ ok: false, error: "Invalid chunk or size" }, 400);
+    }
+
+    try {
+      const encodedPath = path.split("/").map(encodeURIComponent).join("/");
+      let sha;
+
+      try {
+        const existing = await githubRequest(
+          env,
+          `/repos/${repo}/contents/${encodedPath}`
+        );
+        sha = existing.sha;
+      } catch {
+        sha = undefined;
+      }
+
+      const payload = { message, content: contentBase64 };
+      if (sha) payload.sha = sha;
+
+      const result = await githubRequest(
+        env,
+        `/repos/${repo}/contents/${encodedPath}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        }
+      );
+
+      await audit(env, "github_chunk_uploaded", path, { repo });
+
+      return json({
+        ok: true,
+        repository: repo,
+        path,
+        sha: result.content?.sha || null
+      });
+    } catch {
+      return json({ ok: false, error: "GitHub part upload failed" }, 502);
+    }
+  }
+
+  if (url.pathname === "/admin/github/file" && method === "PUT") {
+    const body = await readJson(request);
+    if (!body) return json({ ok: false, error: "Invalid JSON" }, 400);
+
+    const repo = String(body.repo || "");
+    const path = cleanGithubPath(body.path);
+    const content = String(body.content ?? "");
+    const message = String(body.message || "Update managed content");
+
+    if (!checkGithubRepo(repo, env) ||
+        !path ||
+        !isGithubPathWritable(path) ||
+        encoder.encode(content).length > MAX_GITHUB_FILE_BYTES) {
+      return json({ ok: false, error: "Invalid repository, protected path or file size" }, 400);
+    }
+
+    try {
+      const encodedPath = path.split("/").map(encodeURIComponent).join("/");
+      let sha;
+
+      try {
+        const existing = await githubRequest(
+          env,
+          `/repos/${repo}/contents/${encodedPath}`
+        );
+        sha = existing.sha;
+      } catch {
+        sha = undefined;
+      }

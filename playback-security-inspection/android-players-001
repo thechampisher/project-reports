@@ -1,0 +1,160 @@
+            initializePlayer();
+        } else {
+            startWebsitePlayback(url);
+        }
+    }
+
+    private void loadQueue(String fallbackUrl) {
+        String path = getIntent().getStringExtra("queue_file");
+        boolean loaded = false;
+
+        if (path != null) {
+            try (java.io.FileInputStream input =
+                         new java.io.FileInputStream(path);
+                 java.io.ByteArrayOutputStream bytes =
+                         new java.io.ByteArrayOutputStream()) {
+
+                byte[] buffer = new byte[8192];
+                int count;
+                while ((count = input.read(buffer)) != -1) {
+                    bytes.write(buffer, 0, count);
+                }
+
+                JSONArray array = new JSONArray(bytes.toString("UTF-8"));
+                for (int i = 0; i < array.length(); i++) {
+                    JSONObject item = array.optJSONObject(i);
+                    if (item == null) continue;
+
+                    String itemUrl = item.optString("url", "");
+                    if (itemUrl.matches("(?i)^https?://.*")) {
+                        queue.add(item);
+                    }
+                }
+                loaded = !queue.isEmpty();
+
+            } catch (Exception e) {
+                android.util.Log.e("ISAFLIX", "Kuyruk okunamadı", e);
+            }
+        }
+
+        if (!loaded) {
+            JSONObject one = new JSONObject();
+            try {
+                one.put("name", getIntent().getStringExtra("channel_name"));
+                one.put("url", fallbackUrl);
+                one.put("headers", new JSONObject(
+                        getIntent().getStringExtra("headers_json") == null
+                                ? "{}"
+                                : getIntent().getStringExtra("headers_json")
+                ));
+                one.put("is_live", false);
+            } catch (Exception ignored) {}
+            queue.add(one);
+        }
+    }
+
+    private void createInterface() {
+        root = new FrameLayout(this);
+        root.setBackgroundColor(Color.BLACK);
+
+        playerView = new PlayerView(this);
+        playerView.setUseController(true);
+        playerView.setControllerAutoShow(true);
+        playerView.setControllerHideOnTouch(true);
+        playerView.setControllerShowTimeoutMs(3000);
+        playerView.setShowBuffering(
+                PlayerView.SHOW_BUFFERING_WHEN_PLAYING
+        );
+
+        root.addView(playerView, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+        ));
+
+        status = new TextView(this);
+        status.setTextColor(Color.WHITE);
+        status.setTextSize(15);
+        status.setGravity(Gravity.CENTER);
+        status.setPadding(dp(18), dp(12), dp(18), dp(12));
+        status.setBackgroundColor(0x99000000);
+        status.setText("Video hazırlanıyor...");
+        root.addView(status, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER
+        ));
+        status.setVisibility(View.GONE);
+
+        loadingSpinner = new ProgressBar(this, null,
+                android.R.attr.progressBarStyleLarge);
+        loadingSpinner.setIndeterminate(true);
+        loadingSpinner.setIndeterminateTintList(
+                android.content.res.ColorStateList.valueOf(Color.RED));
+        root.addView(loadingSpinner, new FrameLayout.LayoutParams(
+                dp(54), dp(54), Gravity.CENTER));
+        loadingLabel = new TextView(this);
+        loadingLabel.setText("Yükleniyor…");
+        loadingLabel.setTextColor(Color.WHITE);
+        loadingLabel.setTextSize(16);
+        loadingLabel.setGravity(Gravity.CENTER);
+        FrameLayout.LayoutParams labelParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
+        labelParams.topMargin = dp(78);
+        root.addView(loadingLabel, labelParams);
+        loadingLabel.setVisibility(View.GONE);
+
+        Button back = new Button(this);
+        back.setText("‹");
+        back.setTextSize(30);
+        back.setTextColor(Color.WHITE);
+        back.setAllCaps(false);
+        back.setPadding(0, 0, 0, dp(5));
+
+        GradientDrawable backBackground = new GradientDrawable();
+        backBackground.setColor(0xAA101010);
+        backBackground.setCornerRadius(dp(28));
+        back.setBackground(backBackground);
+        back.setOnClickListener(v -> finish());
+
+        FrameLayout.LayoutParams backParams =
+                new FrameLayout.LayoutParams(dp(48), dp(48),
+                        Gravity.TOP | Gravity.LEFT);
+        backParams.setMargins(dp(14), dp(14), 0, 0);
+        root.addView(back, backParams);
+
+        FrameLayout info = new FrameLayout(this);
+        info.setBackgroundColor(0x99000000);
+        info.setPadding(dp(14), dp(10), dp(14), dp(10));
+
+        titleView = new TextView(this);
+        titleView.setTextColor(Color.WHITE);
+        titleView.setTextSize(17);
+        titleView.setMaxLines(2);
+        titleView.setTypeface(null, android.graphics.Typeface.BOLD);
+        info.addView(titleView, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP | Gravity.LEFT
+        ));
+
+        episodeView = new TextView(this);
+        episodeView.setTextColor(0xFFE5E5E5);
+        episodeView.setTextSize(13);
+
+        FrameLayout.LayoutParams episodeParams =
+                new FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.WRAP_CONTENT,
+                        Gravity.TOP | Gravity.LEFT
+                );
+        episodeParams.topMargin = dp(48);
+        info.addView(episodeView, episodeParams);
+
+        FrameLayout.LayoutParams infoParams =
+                new FrameLayout.LayoutParams(
+                        Math.min(
+                                getResources().getDisplayMetrics().widthPixels - dp(28),
+                                dp(430)
+                        ),
+                        dp(105),

@@ -1,0 +1,160 @@
+    }
+
+    favoriteButton.setText(isCurrentChannelFavorite() ? "♥" : "♡");
+    favoriteButton.setContentDescription(
+            isCurrentChannelFavorite()
+                    ? "Favorilerden çıkar"
+                    : "Favorilere ekle");
+}
+
+private void toggleCurrentFavorite() {
+    if (selectedIndex < 0 || selectedIndex >= channels.size()) return;
+
+    Channel channel = channels.get(selectedIndex);
+    boolean add = !isCurrentChannelFavorite();
+
+    try {
+        JSONObject item = new JSONObject();
+        item.put("name", channel.name == null ? "İsimsiz kanal" : channel.name);
+        item.put("url", channel.url);
+        item.put("group", channel.group == null ? "Genel" : channel.group);
+        item.put("logo", channel.logo == null ? "" : channel.logo);
+        item.put("is_live", channel.isLive);
+        item.put("season", channel.season);
+        item.put("episode", channel.episode);
+
+        android.content.SharedPreferences prefs =
+                getSharedPreferences("isa_tv_data", MODE_PRIVATE);
+
+        JSONArray old = new JSONArray(prefs.getString("favorites", "[]"));
+        JSONArray updated = new JSONArray();
+
+        for (int i = 0; i < old.length(); i++) {
+            JSONObject existing = old.optJSONObject(i);
+            if (existing == null) continue;
+
+            if (!channel.url.equals(existing.optString("url", ""))) {
+                updated.put(existing);
+            }
+        }
+
+        if (add) updated.put(item);
+
+        prefs.edit().putString("favorites", updated.toString()).apply();
+        updatePortraitOverlay();
+
+    } catch (Exception e) {
+        Log.e(TAG, "Favori değiştirilemedi", e);
+    }
+}
+
+private void showChannelList() {
+    if (channels.isEmpty()) return;
+    if (channelDialog != null && channelDialog.isShowing()) return;
+
+    final Dialog dialog = new Dialog(this);
+    channelDialog = dialog;
+
+    final java.util.ArrayList<String> groups = new java.util.ArrayList<>();
+    final java.util.LinkedHashMap<String, java.util.ArrayList<Integer>> grouped =
+            new java.util.LinkedHashMap<>();
+
+    for (int i = 0; i < channels.size(); i++) {
+        Channel c = channels.get(i);
+        String g = c.group == null || c.group.trim().isEmpty()
+                ? "Genel" : c.group.trim();
+
+        if (!grouped.containsKey(g)) {
+            grouped.put(g, new java.util.ArrayList<Integer>());
+            groups.add(g);
+        }
+        grouped.get(g).add(i);
+    }
+
+    final int[] groupIndex = {0};
+
+    // Açık kanalın grubunu başlangıç grubu yap.
+    if (selectedIndex >= 0 && selectedIndex < channels.size()) {
+        String selectedGroup = channels.get(selectedIndex).group;
+        if (selectedGroup == null || selectedGroup.trim().isEmpty()) {
+            selectedGroup = "Genel";
+        } else {
+            selectedGroup = selectedGroup.trim();
+        }
+
+        int foundGroup = groups.indexOf(selectedGroup);
+        if (foundGroup >= 0) groupIndex[0] = foundGroup;
+    }
+
+    final java.util.ArrayList<Integer> visibleItems = new java.util.ArrayList<>();
+
+    LinearLayout root = new LinearLayout(this);
+    root.setOrientation(LinearLayout.VERTICAL);
+    root.setPadding(
+            dp(isPortraitMode() ? 14 : 8),
+            dp(isPortraitMode() ? 14 : 8),
+            dp(isPortraitMode() ? 14 : 8),
+            dp(isPortraitMode() ? 12 : 8));
+    root.setBackgroundColor(Color.rgb(17, 21, 29));
+
+    TextView title = new TextView(this);
+    title.setText("İSA TV HD  •  KANALLAR");
+    title.setTextColor(Color.WHITE);
+    title.setTextSize(18);
+    title.setTypeface(null, android.graphics.Typeface.BOLD);
+    title.setPadding(dp(8), dp(8), dp(8), dp(14));
+    root.addView(title);
+
+    LinearLayout groupBar = new LinearLayout(this);
+    groupBar.setGravity(Gravity.CENTER);
+    groupBar.setOrientation(LinearLayout.HORIZONTAL);
+    groupBar.setPadding(dp(4), dp(8), dp(4), dp(8));
+    groupBar.setBackgroundColor(0xFF252E3C);
+
+    TextView previous = new TextView(this);
+    previous.setText("‹");
+    previous.setTextSize(30);
+    previous.setTextColor(Color.WHITE);
+    previous.setGravity(Gravity.CENTER);
+    previous.setMinWidth(dp(48));
+
+    TextView groupName = new TextView(this);
+    groupName.setTextColor(Color.WHITE);
+    groupName.setTextSize(14);
+    groupName.setTypeface(null, android.graphics.Typeface.BOLD);
+    groupName.setGravity(Gravity.CENTER);
+    groupName.setMaxLines(2);
+
+    TextView next = new TextView(this);
+    next.setText("›");
+    next.setTextSize(30);
+    next.setTextColor(Color.WHITE);
+    next.setGravity(Gravity.CENTER);
+    next.setMinWidth(dp(48));
+
+    groupBar.addView(previous);
+    groupBar.addView(groupName, new LinearLayout.LayoutParams(
+            0, dp(48), 1f));
+    groupBar.addView(next);
+    root.addView(groupBar);
+
+    EditText search = new EditText(this);
+    search.setSingleLine(true);
+    search.setTextColor(Color.WHITE);
+    search.setHintTextColor(0xFFAAAAAA);
+    search.setHint("Bu grupta kanal ara...");
+    search.setTextSize(14);
+    search.setPadding(dp(12), 0, dp(12), 0);
+    search.setBackgroundColor(0xFF252E3C);
+
+    LinearLayout.LayoutParams searchParams =
+            new LinearLayout.LayoutParams(-1, dp(isPortraitMode() ? 46 : 36));
+    searchParams.topMargin = dp(10);
+    searchParams.bottomMargin = dp(8);
+    root.addView(search, searchParams);
+
+    ListView list = new ListView(this);
+    list.setDivider(new android.graphics.drawable.ColorDrawable(0x22FFFFFF));
+    list.setDividerHeight(dp(1));
+    list.setCacheColorHint(Color.TRANSPARENT);
+

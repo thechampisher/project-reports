@@ -1,0 +1,160 @@
+        OR julianday(m.expires_at) > julianday('now')
+      )
+      AND (
+        ps.broadcast_id IS NULL
+        OR b.status = 'live'
+      )
+    LIMIT 1
+  `).bind(
+    payload.sid,
+    payload.member_id,
+    payload.device_id,
+    nowSeconds()
+  ).first();
+
+  return Boolean(session);
+}
+
+async function proxyMedia(request, env, token, cors = {}) {
+  const respondJson = (data, status) => json(data, status, cors);
+  const payload = await readMediaToken(token, env);
+
+  if (!payload ||
+      !["play", "manifest", "resource"].includes(payload.kind) ||
+      !payload.url ||
+      !payload.sid ||
+      !allowedSource(payload.url, env)) {
+    return respondJson({ ok: false, error: "Invalid or expired playback token" }, 403);
+  }
+
+  // Ana ve alt oynatma listelerinde iptal kontrolü.
+  // Segment tokenlarında D1 sorgusu kesinlikle yapılmaz.
+  if (payload.kind === "play" || payload.kind === "manifest") {
+    let active = false;
+
+    try {
+      active = await activePlaybackSession(env, payload);
+    } catch {
+      return respondJson({ ok: false, error: "Playback authorization unavailable" }, 503);
+    }
+
+    if (!active) {
+      return respondJson({ ok: false, error: "Playback session revoked or expired" }, 403);
+    }
+  }
+
+  const headers = new Headers({
+    "Accept": request.headers.get("Accept") || "*/*",
+    "User-Agent": "MediaProxy/2.0"
+  });
+
+  try {
+    const sourceHost = new URL(payload.url).hostname.toLowerCase();
+    if (sourceHost === "andro.evrenesoglu101.click") {
+      headers.set("Referer", "https://taraftarium24.xyz/");
+      headers.set("Origin", "https://taraftarium24.xyz");
+    }
+  } catch (_) {}
+
+
+  const range = request.headers.get("Range");
+  if (range) headers.set("Range", range);
+
+  let upstream;
+  let currentUrl = payload.url;
+
+  // Yönlendirmeleri kontrollü takip et.
+  // Her yeni adres yeniden doğrulanır.
+  for (let redirectCount = 0; redirectCount <= 5; redirectCount++) {
+    if (!allowedSource(currentUrl, env)) {
+      return respondJson({
+        ok: false,
+        error: "Redirect source is not permitted"
+      }, 502);
+    }
+
+    try {
+      upstream = await fetch(currentUrl, {
+        method: "GET",
+        headers,
+        redirect: "manual"
+      });
+    } catch {
+      return respondJson({
+        ok: false,
+        error: "Upstream unavailable"
+      }, 502);
+    }
+
+    if (upstream.status < 300 || upstream.status >= 400) {
+      break;
+    }
+
+    const location = upstream.headers.get("Location");
+
+    if (!location || redirectCount === 5) {
+      return respondJson({
+        ok: false,
+        error: "Redirect limit exceeded"
+      }, 502);
+    }
+
+    try {
+      currentUrl = new URL(location, currentUrl).toString();
+    } catch {
+      return respondJson({
+        ok: false,
+        error: "Invalid redirect address"
+      }, 502);
+    }
+  }
+
+  if (!upstream || (upstream.status >= 300 && upstream.status < 400)) {
+    return respondJson({
+      ok: false,
+      error: "Upstream redirect failed"
+    }, 502);
+  }
+
+  if (!upstream.ok && upstream.status !== 206) {
+    return respondJson({ ok: false, error: "Upstream request failed" }, 502);
+  }
+
+  const contentType = upstream.headers.get("Content-Type") || "";
+  const manifest = isManifest(currentUrl, contentType);
+
+  if (manifest) {
+    // Uzantısı tanınmayan alt oynatma listeleri ancak upstream
+    // Content-Type yanıtından sonra anlaşılabilir.
+    // Bu kontrol manifest başına yapılır; segmentlere uygulanmaz.
+    if (payload.kind === "resource") {
+      let active = false;
+
+      try {
+        active = await activePlaybackSession(env, payload);
+      } catch {
+        return respondJson({
+          ok: false,
+          error: "Playback authorization unavailable"
+        }, 503);
+      }
+
+      if (!active) {
+        return respondJson({
+          ok: false,
+          error: "Playback session revoked or expired"
+        }, 403);
+      }
+    }
+
+    const sourceText = await upstream.text();
+
+    if (sourceText.length > 2 * 1024 * 1024) {
+      return respondJson({ ok: false, error: "Manifest too large" }, 502);
+    }
+
+    let rewritten;
+
+    try {
+      rewritten = await rewriteManifest(
+        sourceText,

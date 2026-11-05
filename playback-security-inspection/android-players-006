@@ -1,0 +1,160 @@
+            logo.setContentDescription("İSA TV HD");
+
+            FrameLayout.LayoutParams params =
+                    new FrameLayout.LayoutParams(
+                            dp(145),
+                            dp(90),
+                            Gravity.TOP | Gravity.RIGHT
+                    );
+            params.setMargins(0, dp(16), dp(22), 0);
+            root.addView(logo, params);
+
+        } catch (Exception e) {
+            android.util.Log.e("ISAFLIX", "Logo yüklenemedi", e);
+        }
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (event.getAction() == KeyEvent.ACTION_DOWN
+                && event.getRepeatCount() == 0
+                && player != null) {
+
+            int key = event.getKeyCode();
+
+            if (key == KeyEvent.KEYCODE_DPAD_UP
+                    || key == KeyEvent.KEYCODE_CHANNEL_UP
+                    || key == KeyEvent.KEYCODE_PAGE_UP) {
+                if (player.hasNextMediaItem()) {
+                    player.seekToNextMediaItem();
+                }
+                return true;
+            }
+
+            if (key == KeyEvent.KEYCODE_DPAD_DOWN
+                    || key == KeyEvent.KEYCODE_CHANNEL_DOWN
+                    || key == KeyEvent.KEYCODE_PAGE_DOWN) {
+                if (player.hasPreviousMediaItem()) {
+                    player.seekToPreviousMediaItem();
+                }
+                return true;
+            }
+        }
+
+        return super.dispatchKeyEvent(event);
+    }
+
+    private int dp(float value) {
+        return (int)(
+                value * getResources().getDisplayMetrics().density + 0.5f
+        );
+    }
+
+    private void applyImmersiveMode() {
+        getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                | View.SYSTEM_UI_FLAG_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        );
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) applyImmersiveMode();
+    }
+
+    @Override
+    public void onBackPressed() {
+        resolvingCancelled = true;
+        websitePlaybackMode = false;
+        websiteMediaAccepted = true;
+        if (webView != null) {
+            webView.stopLoading();
+            webView.onPause();
+        }
+        finish();
+    }
+
+    @Override
+    protected void onPause() {
+        if (player != null) player.pause();
+        if (webView != null) webView.onPause();
+        super.onPause();
+    }
+
+    @Override
+    protected void onDestroy() {
+        infoHandler.removeCallbacksAndMessages(null);
+        websiteHandler.removeCallbacksAndMessages(null);
+        if (playerView != null) playerView.setPlayer(null);
+        if (player != null) {
+            player.release();
+            player = null;
+        }
+        resolvingCancelled = true;
+        websitePlaybackMode = false;
+        if (webView != null) {
+            webView.stopLoading();
+            webView.destroy();
+            webView = null;
+        }
+        super.onDestroy();
+    }
+}
+
+========== DOSYA: /data/data/com.termux/files/home/app-work/app/src/main/java/com/isatvhd/player/PlayerActivity.java ==========
+27:import androidx.media3.common.MediaItem;
+28:import androidx.media3.exoplayer.hls.HlsMediaSource;
+32:import androidx.media3.datasource.DefaultHttpDataSource;
+176:                channel.url = object.optString("url", "");
+201:                if (channel.url.matches("(?i)^https?://.*")) {
+213:            single.url = getIntent().getStringExtra("stream_url");
+244:        playSelected();
+681:                    MediaItem current = p.getCurrentMediaItem();
+720:    private void prepareChannel(ExoPlayer target, int index,
+727:            DefaultHttpDataSource.Factory factory =
+728:                    new DefaultHttpDataSource.Factory()
+740:            String url = channel.url;
+744:            MediaItem.Builder itemBuilder = new MediaItem.Builder()
+751:                        new MediaItem.LiveConfiguration.Builder()
+759:            MediaItem item = itemBuilder.build();
+762:            target.clearMediaItems();
+775:            androidx.media3.exoplayer.source.MediaSource mediaSource;
+778:                mediaSource = new HlsMediaSource.Factory(factory)
+780:                        .createMediaSource(item);
+783:                        new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(
+785:                        ).createMediaSource(item);
+788:            target.setMediaSource(mediaSource);
+812:        p.clearMediaItems();
+818:            p.release();
+853:                prepareChannel(standby, index, true);
+910:                    playSelected();
+949:    private void playSelected() {
+988:                prepareChannel(player, selectedIndex, false);
+1150:        item.put("url", channel.url);
+1167:            if (!channel.url.equals(existing.optString("url", ""))) {
+1317:            TextView subtitle;
+1324:                subtitle = (TextView) texts.getChildAt(1);
+1348:                subtitle = new TextView(PlayerActivity.this);
+1349:                subtitle.setTextColor(0xFFAAAAAA);
+1350:                subtitle.setTextSize(isPortraitMode() ? 11 : 9);
+1353:                texts.addView(subtitle);
+1363:            subtitle.setText(actual == selectedIndex ? "ŞU ANDA OYNUYOR" : "CANLI YAYIN");
+1440:        playSelected();
+1612:                p.release();
+
+package com.isatvhd.player;
+
+import android.app.Activity;
+import android.widget.LinearLayout;
+import android.graphics.drawable.GradientDrawable;
+import android.widget.BaseAdapter;
+import android.widget.ListView;
+import android.app.Dialog;
+import android.app.AlertDialog;
+import android.os.Bundle;
+import android.os.Handler;

@@ -1,0 +1,160 @@
+                        Gravity.BOTTOM | Gravity.LEFT
+                );
+        infoParams.setMargins(dp(14), 0, dp(14), dp(22));
+        root.addView(info, infoParams);
+
+        createTvLogo();
+
+        favoriteButton = new Button(this);
+        favoriteButton.setText("♡");
+        favoriteButton.setTextSize(23);
+        favoriteButton.setTextColor(Color.WHITE);
+        favoriteButton.setAllCaps(false);
+        favoriteButton.setPadding(0, 0, 0, dp(3));
+        GradientDrawable favoriteBackground = new GradientDrawable();
+        favoriteBackground.setColor(0xCC171717);
+        favoriteBackground.setCornerRadius(dp(26));
+        favoriteButton.setBackground(favoriteBackground);
+        favoriteButton.setContentDescription("İSAFLIX favorilere ekle");
+        favoriteButton.setOnClickListener(v -> toggleCurrentFavorite());
+
+        Configuration config = getResources().getConfiguration();
+        boolean wideDevice = config.orientation == Configuration.ORIENTATION_LANDSCAPE
+                && (config.smallestScreenWidthDp >= 600
+                || (config.uiMode & Configuration.UI_MODE_TYPE_MASK)
+                == Configuration.UI_MODE_TYPE_TELEVISION);
+        FrameLayout.LayoutParams favoriteParams =
+                new FrameLayout.LayoutParams(dp(48), dp(48),
+                        Gravity.TOP | Gravity.RIGHT);
+        favoriteParams.setMargins(0, wideDevice ? dp(112) : dp(14), dp(14), 0);
+        root.addView(favoriteButton, favoriteParams);
+
+        setContentView(root);
+        updateTitle();
+    }
+
+
+    private boolean isDirectMediaUrl(String value) {
+        if (value == null) return false;
+        String lower = value.toLowerCase(java.util.Locale.ROOT);
+        try {
+            String path = Uri.parse(value).getPath();
+            if (path != null && path.matches(
+                    "(?i).*\\.(m3u8|mpd|mp4|m4v|webm|mkv|mov|3gp)$")) {
+                return true;
+            }
+        } catch (Exception ignored) {}
+        return lower.contains("format=m3u8")
+                || lower.contains("type=hls")
+                || lower.contains("format=mpd")
+                || lower.contains("type=dash");
+    }
+
+
+    private void startWebsitePlayback(String pageUrl) {
+        websitePlaybackMode = true;
+        websiteMediaAccepted = false;
+        resolvingCancelled = false;
+        websitePageUrl = pageUrl;
+        websiteMediaCandidates.clear();
+        websiteHandler.removeCallbacksAndMessages(null);
+
+        int selected = getIntent().getIntExtra("selected_index", 0);
+        if (selected < 0 || selected >= queue.size()) selected = 0;
+        JSONObject chosen = queue.isEmpty() ? new JSONObject() : queue.get(selected);
+        queue.clear();
+        queue.add(chosen);
+
+        playerView.setVisibility(View.GONE);
+        loadingSpinner.setVisibility(View.VISIBLE);
+        loadingLabel.setVisibility(View.VISIBLE);
+        status.setVisibility(View.GONE);
+
+        webView = new WebView(this);
+        webView.setVisibility(View.INVISIBLE);
+        webView.setBackgroundColor(Color.BLACK);
+        webView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setDatabaseEnabled(true);
+        settings.setMediaPlaybackRequiresUserGesture(false);
+        settings.setSupportMultipleWindows(false);
+        settings.setJavaScriptCanOpenWindowsAutomatically(false);
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(false);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+
+        CookieManager cookies = CookieManager.getInstance();
+        cookies.setAcceptCookie(true);
+        cookies.setAcceptThirdPartyCookies(webView, true);
+        webView.addJavascriptInterface(new WebsiteBridge(), "ISAWebsiteBridge");
+
+        final String initialHost;
+        try {
+            initialHost = Uri.parse(pageUrl).getHost();
+            if (initialHost == null) throw new IllegalArgumentException("Host yok");
+        } catch (Exception e) {
+            status.setText("İçerik adresi okunamadı.");
+            status.setVisibility(View.VISIBLE);
+            return;
+        }
+
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onCreateWindow(WebView view, boolean dialog,
+                    boolean userGesture, android.os.Message resultMsg) {
+                return false;
+            }
+        });
+
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                try {
+                    Uri target = Uri.parse(url);
+                    String scheme = target.getScheme();
+                    if (!"http".equalsIgnoreCase(scheme)
+                            && !"https".equalsIgnoreCase(scheme)) return true;
+                    String host = target.getHost();
+                    return host == null || !host.equalsIgnoreCase(initialHost);
+                } catch (Exception e) {
+                    return true;
+                }
+            }
+
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view,
+                    android.webkit.WebResourceRequest request) {
+                if (request == null || request.getUrl() == null) return true;
+
+                // Video oynatıcı iframe'leri farklı alan adlarında olabilir.
+                // Alt çerçevelerin yüklenmesine izin ver; ana sayfa dışına
+                // yapılan reklam/yönlendirme geçişlerini engelle.
+                if (!request.isForMainFrame()) return false;
+
+                String targetHost = request.getUrl().getHost();
+                String scheme = request.getUrl().getScheme();
+
+                if (!"http".equalsIgnoreCase(scheme)
+                        && !"https".equalsIgnoreCase(scheme)) return true;
+
+                return targetHost == null
+                        || !targetHost.equalsIgnoreCase(initialHost);
+            }
+
+            @Override
+            public android.webkit.WebResourceResponse shouldInterceptRequest(
+                    WebView view, android.webkit.WebResourceRequest request) {
+                if (request != null && request.getUrl() != null)
+                    collectWebsiteMedia(request.getUrl().toString());
+                return super.shouldInterceptRequest(view, request);
+            }
+
+            @Override
+            public android.webkit.WebResourceResponse shouldInterceptRequest(
+                    WebView view, String url) {
+                collectWebsiteMedia(url);
+                return super.shouldInterceptRequest(view, url);
+            }

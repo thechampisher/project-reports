@@ -1,0 +1,160 @@
+                return;
+            }
+
+            retryCount[0]++;
+            Log.w(TAG, "Yayın yeniden hazırlanıyor. Deneme: "
+                    + retryCount[0]);
+
+            p.prepare();
+            p.play();
+        };
+
+        p.addListener(new Player.Listener() {
+            @Override
+            public void onPlaybackStateChanged(int state) {
+                if (p != player) return;
+
+                if (state == Player.STATE_READY) {
+                    retryCount[0] = 0;
+                    retryHandler.removeCallbacks(retryTask[0]);
+                    status.setVisibility(View.GONE);
+                    loadingSpinner.setVisibility(View.GONE);
+
+                } else if (state == Player.STATE_BUFFERING) {
+                    loadingSpinner.setVisibility(View.VISIBLE);
+
+                } else if (state == Player.STATE_IDLE) {
+                    loadingSpinner.setVisibility(View.GONE);
+
+                } else if (state == Player.STATE_ENDED) {
+                    MediaItem current = p.getCurrentMediaItem();
+
+                    if (current != null
+                            && current.localConfiguration != null) {
+                        String uri = current.localConfiguration.uri
+                                .toString().toLowerCase();
+
+                        if (uri.contains(".m3u8")) {
+                            retryHandler.removeCallbacks(retryTask[0]);
+                            retryHandler.postDelayed(retryTask[0], 1500);
+                        }
+                    }
+                }
+            }
+
+            @Override
+            public void onPlayerError(PlaybackException error) {
+                Log.e(TAG, "Oynatıcı hatası: "
+                        + error.getErrorCodeName(), error);
+
+                if (p == player) {
+                    status.setVisibility(View.GONE);
+                    loadingSpinner.setVisibility(View.VISIBLE);
+
+                    retryHandler.removeCallbacks(retryTask[0]);
+
+                    long delay = Math.min(
+                            1500L * (retryCount[0] + 1),
+                            10000L
+                    );
+
+                    retryHandler.postDelayed(retryTask[0], delay);
+                }
+            }
+        });
+
+        return p;
+    }
+
+    private void prepareChannel(ExoPlayer target, int index,
+                                boolean preload) {
+        if (index < 0 || index >= channels.size()) return;
+
+        Channel channel = channels.get(index);
+
+        try {
+            DefaultHttpDataSource.Factory factory =
+                    new DefaultHttpDataSource.Factory()
+                            .setUserAgent(
+                                    channel.headers.containsKey("User-Agent")
+                                    ? channel.headers.get("User-Agent")
+                                    : "Mozilla/5.0 (Linux; Android 11) "
+                                    + "AppleWebKit/537.36 Chrome/120 Safari/537.36"
+                            )
+                            .setConnectTimeoutMs(20000)
+                            .setReadTimeoutMs(60000)
+                            .setAllowCrossProtocolRedirects(true)
+                            .setDefaultRequestProperties(channel.headers);
+
+            String url = channel.url;
+            String lowerUrl = url.toLowerCase();
+            boolean isHls = lowerUrl.contains(".m3u8");
+
+            MediaItem.Builder itemBuilder = new MediaItem.Builder()
+                    .setUri(Uri.parse(url))
+                    .setMediaId(channel.name == null
+                            ? url : channel.name);
+
+            if (isHls) {
+                itemBuilder.setLiveConfiguration(
+                        new MediaItem.LiveConfiguration.Builder()
+                                .setTargetOffsetMs(15000)
+                                .setMinPlaybackSpeed(0.97f)
+                                .setMaxPlaybackSpeed(1.03f)
+                                .build()
+                );
+            }
+
+            MediaItem item = itemBuilder.build();
+
+            target.stop();
+            target.clearMediaItems();
+
+            target.setVolume(preload ? 0f : 1f);
+
+            target.setTrackSelectionParameters(
+                    target.getTrackSelectionParameters()
+                            .buildUpon()
+                            .setMaxVideoBitrate(
+                                    preload ? 1500000 : Integer.MAX_VALUE
+                            )
+                            .build()
+            );
+
+            androidx.media3.exoplayer.source.MediaSource mediaSource;
+
+            if (isHls) {
+                mediaSource = new HlsMediaSource.Factory(factory)
+                        .setAllowChunklessPreparation(true)
+                        .createMediaSource(item);
+            } else {
+                mediaSource =
+                        new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(
+                                factory
+                        ).createMediaSource(item);
+            }
+
+            target.setMediaSource(mediaSource);
+            target.prepare();
+            target.setPlayWhenReady(!preload);
+
+        } catch (Exception e) {
+            Log.e(TAG, "Kanal hazırlanamadı: " + index, e);
+        }
+    }
+
+    
+
+    private ExoPlayer obtainStandbyPlayer() {
+        if (!standbyPlayers.isEmpty()) {
+            return standbyPlayers.remove(standbyPlayers.size() - 1);
+        }
+
+        return createManagedPlayer(true);
+    }
+
+    private void recyclePlayer(ExoPlayer p) {
+        if (p == null || p == player) return;
+
+        p.setPlayWhenReady(false);
+        p.stop();

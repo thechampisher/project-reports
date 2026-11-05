@@ -1,0 +1,160 @@
+========== WORKER CONFIG ==========
+name = "stream-access-service"
+main = "src/index.js"
+compatibility_date = "2026-11-02"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "isa-admin-prod-db"
+database_id = "36c92973-5128-4cf0-8420-736a607a65b8"
+migrations_dir = "migrations"
+
+[vars]
+PLAYBACK_TICKET_TTL = "1800"
+
+========== ROUTE VE MEDYA FONKSİYONLARI ==========
+380:async function createMediaToken(payload, env, lifetime) {
+398:async function readMediaToken(token, env) {
+421:async function makeResourceUrl(sourceUrl, env, session) {
+432:  const token = await createMediaToken({
+440:  return `/p/${token}`;
+448:async function rewriteManifest(text, baseUrl, env, session) {
+461:      const rewritten = await rewriteUriAttributes(
+469:    output.push(await makeResourceUrl(absolute, env, session));
+475:async function rewriteUriAttributes(line, baseUrl, env, session) {
+483:    const replacement = await makeResourceUrl(absolute, env, session);
+514:async function activePlaybackSession(env, payload) {
+529:    LEFT JOIN broadcasts b
+530:      ON b.id = ps.broadcast_id
+544:        ps.broadcast_id IS NULL
+558:async function proxyMedia(request, env, token, cors = {}) {
+560:  const payload = await readMediaToken(token, env);
+576:      active = await activePlaybackSession(env, payload);
+674:        active = await activePlaybackSession(env, payload);
+699:      rewritten = await rewriteManifest(
+725:async function issuePlayback(env, member, deviceId, source, broadcastId = null) {
+735:  const ticket = await createMediaToken({
+741:    broadcast_id: broadcastId
+751:      (id, member_id, device_id, stream_source_id, broadcast_id,
+759:    broadcastId,
+765:    playback_url: `/play/${ticket}`,
+985:        "DELETE FROM broadcast_recipients WHERE member_id = ?"
+1251:  if (method === "POST" && path === "/admin/broadcast/start") {
+1264:      return json({ ok: false, error: "Invalid broadcast" }, 400);
+1275:    const broadcastId = uuid();
+1279:        INSERT INTO broadcasts
+1283:      `).bind(broadcastId, title, message, streamId, audience)
+1292:        INSERT INTO broadcast_recipients
+1293:          (id, broadcast_id, member_id, status)
+1297:      `).bind(broadcastId));
+1335:          INSERT INTO broadcast_recipients
+1336:            (id, broadcast_id, member_id, status)
+1338:        `).bind(uuid(), broadcastId, memberId));
+1343:    await audit(env, "broadcast_started", broadcastId, {
+1350:      broadcast_id: broadcastId,
+1356:  if (method === "POST" && path === "/admin/broadcast/stop") {
+1358:    const requestedId = String(body?.broadcast_id || "").trim();
+1362:          SELECT id FROM broadcasts
+1367:          SELECT id FROM broadcasts
+1381:        UPDATE broadcasts
+1391:        WHERE broadcast_id = ? AND status = 'active'
+1395:        UPDATE broadcast_recipients
+1397:        WHERE broadcast_id = ? AND status IN ('targeted', 'authorized')
+1401:    await audit(env, "broadcast_stopped", id);
+1402:    return json({ ok: true, broadcast_id: id, stopped: true });
+1405:  if (method === "GET" && path === "/admin/broadcast") {
+1410:      FROM broadcasts b
+1416:    return json({ ok: true, broadcasts: result.results || [] });
+1746:  if (method === "GET" && path === "/member/broadcast") {
+1750:      FROM broadcasts b
+1756:          FROM broadcast_recipients r
+1757:          WHERE r.broadcast_id = b.id
+1765:    return json({ ok: true, broadcasts: result.results || [] });
+1768:  if (method === "POST" && path === "/member/playback") {
+1772:    if (!body.broadcast_id) {
+1775:        error: "An active broadcast is required"
+1780:    const broadcastId = String(body.broadcast_id).trim();
+1782:    if (!broadcastId || broadcastId.length > 180) {
+1783:      return json({ ok: false, error: "Invalid broadcast ID" }, 400);
+1788:      const broadcast = await env.DB.prepare(`
+1791:        FROM broadcasts b
+1795:      `).bind(broadcastId).first();
+1797:      if (!broadcast || broadcast.source_status !== "active") {
+1803:        FROM broadcast_recipients
+1804:        WHERE broadcast_id = ?
+1808:      `).bind(broadcastId, member.id).first();
+1811:        return json({ ok: false, error: "Not authorized for broadcast" }, 403);
+1815:        UPDATE broadcast_recipients
+1821:        id: broadcast.source_id,
+1822:        source_url: broadcast.source_url,
+1823:        status: broadcast.source_status
+1831:    const playback = await issuePlayback(
+1836:      broadcastId
+1894:      if (path.startsWith("/play/") && method === "GET") {
+1895:        const ticket = path.slice("/play/".length);
+1896:        return proxyMedia(request, env, ticket, cors);
+1899:      if (path.startsWith("/p/") && method === "GET") {
+1900:        const ticket = path.slice("/p/".length);
+1901:        return proxyMedia(request, env, ticket, cors);
+
+========== WORKER SOURCE ==========
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+
+const VERSION = "2.0.0";
+const MEMBER_TOKEN_SECONDS = 10 * 365 * 24 * 60 * 60;
+const ADMIN_TOKEN_SECONDS = 8 * 60 * 60;
+const PLAYBACK_TOKEN_SECONDS = 120;
+const PLAYBACK_SESSION_SECONDS = 12 * 60 * 60;
+const PLAYBACK_TICKET_SECONDS = PLAYBACK_SESSION_SECONDS;
+const MAX_SELECTED_MEMBERS = 250;
+const MAX_GITHUB_FILE_BYTES = 900000;
+const MAX_GITHUB_CHUNK_BYTES = 24 * 1024 * 1024;
+const MAX_GITHUB_REQUEST_BYTES = 36 * 1024 * 1024;
+
+function json(data, status = 200, headers = {}) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+      ...headers
+    }
+  });
+}
+
+function randomToken(bytes = 32) {
+  const value = crypto.getRandomValues(new Uint8Array(bytes));
+  return b64url(value);
+}
+
+function b64url(value) {
+  let binary = "";
+  for (const byte of value) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function unb64url(value) {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
+  const binary = atob(padded);
+  return Uint8Array.from(binary, c => c.charCodeAt(0));
+}
+
+async function sha256(value) {
+  const result = await crypto.subtle.digest(
+    "SHA-256",
+    typeof value === "string" ? encoder.encode(value) : value
+  );
+  return b64url(new Uint8Array(result));
+}
+
+function equalText(a, b) {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const aa = encoder.encode(a);
+  const bb = encoder.encode(b);
+  if (aa.length !== bb.length) return false;
+  let diff = 0;
+  for (let i = 0; i < aa.length; i++) diff |= aa[i] ^ bb[i];
+  return diff === 0;
+}

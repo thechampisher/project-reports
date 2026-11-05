@@ -1,0 +1,160 @@
+        p.clearMediaItems();
+        p.setVolume(0f);
+
+        if (!standbyPlayers.contains(p) && standbyPlayers.size() < 2) {
+            standbyPlayers.add(p);
+        } else if (!standbyPlayers.contains(p)) {
+            p.release();
+        }
+    }
+
+    private void prepareNeighborChannels() {
+        if (channels.size() < 2 || player == null) return;
+
+        int previous = (selectedIndex - 1 + channels.size())
+                % channels.size();
+
+        int next = (selectedIndex + 1) % channels.size();
+
+        java.util.HashSet<Integer> wanted = new java.util.HashSet<>();
+        wanted.add(previous);
+        wanted.add(next);
+        wanted.remove(selectedIndex);
+
+        java.util.Iterator<Map.Entry<Integer, ExoPlayer>> iterator =
+                preloadedPlayers.entrySet().iterator();
+
+        while (iterator.hasNext()) {
+            Map.Entry<Integer, ExoPlayer> entry = iterator.next();
+
+            if (!wanted.contains(entry.getKey())) {
+                ExoPlayer old = entry.getValue();
+                iterator.remove();
+                recyclePlayer(old);
+            }
+        }
+
+        for (Integer index : wanted) {
+            if (!preloadedPlayers.containsKey(index)) {
+                ExoPlayer standby = obtainStandbyPlayer();
+
+                preloadedPlayers.put(index, standby);
+                prepareChannel(standby, index, true);
+            }
+        }
+    }
+
+
+    private void animateViewsBack(boolean horizontal) {
+        if (playerView == null) return;
+
+        playerView.animate().cancel();
+        playerView.animate()
+                .translationX(horizontal ? 0f : playerView.getTranslationX())
+                .translationY(horizontal ? playerView.getTranslationY() : 0f)
+                .setDuration(180)
+                .start();
+
+        if (portraitPanel != null) {
+            portraitPanel.animate().cancel();
+            portraitPanel.animate()
+                    .translationX(horizontal ? 0f : portraitPanel.getTranslationX())
+                    .translationY(horizontal ? portraitPanel.getTranslationY() : 0f)
+                    .setDuration(180)
+                    .start();
+        }
+    }
+
+    private void finishChannelSwipe(int direction) {
+        finishChannelSwipe(direction, false);
+    }
+
+    private void finishChannelSwipe(int direction, boolean horizontal) {
+        if (channels.isEmpty() || channelTransitioning ||
+                playerView == null) return;
+
+        channelTransitioning = true;
+
+        final int distance = horizontal ? Math.max(1, playerView.getWidth()) : Math.max(
+                playerView.getHeight(), getResources().getDisplayMetrics().heightPixels);
+        final float exit = direction > 0 ? -distance : distance;
+        final float enter = -exit;
+
+        playerView.animate().cancel();
+
+        if (portraitPanel != null) {
+            portraitPanel.animate().cancel();
+        }
+
+        playerView.animate()
+                .translationX(horizontal ? exit : 0f)
+                .translationY(horizontal ? 0f : exit)
+                .setDuration(150)
+                .withEndAction(() -> {
+                    selectedIndex += direction;
+
+                    if (selectedIndex >= channels.size()) selectedIndex = 0;
+                    if (selectedIndex < 0) selectedIndex = channels.size() - 1;
+
+                    playSelected();
+
+                    playerView.setTranslationX(horizontal ? enter : 0f);
+                    playerView.setTranslationY(horizontal ? 0f : enter);
+
+                    if (portraitPanel != null) {
+                        portraitPanel.setTranslationX(horizontal ? enter : 0f);
+                        portraitPanel.setTranslationY(horizontal ? 0f : enter);
+                    }
+
+                    playerView.animate()
+                            .translationX(0f)
+                            .translationY(0f)
+                            .setDuration(220)
+                            .withEndAction(() -> {
+                                channelTransitioning = false;
+                            })
+                            .start();
+
+                    if (portraitPanel != null) {
+                        portraitPanel.animate()
+                                .translationX(0f)
+                                .translationY(0f)
+                                .setDuration(220)
+                                .start();
+                    }
+                })
+                .start();
+
+        if (portraitPanel != null) {
+            portraitPanel.animate()
+                    .translationX(horizontal ? exit : 0f)
+                    .translationY(horizontal ? 0f : exit)
+                    .setDuration(150)
+                    .start();
+        }
+    }
+
+    
+    private void playSelected() {
+        if (player == null || selectedIndex < 0 ||
+                selectedIndex >= channels.size()) return;
+
+        Channel channel = channels.get(selectedIndex);
+
+        updatePortraitOverlay();
+
+        if (loadingSpinner != null) {
+            loadingSpinner.setVisibility(View.VISIBLE);
+        }
+
+        if (status != null) {
+            status.setVisibility(View.GONE);
+        }
+
+        ExoPlayer oldActive = player;
+        ExoPlayer readyPlayer = preloadedPlayers.remove(selectedIndex);
+
+        try {
+            if (readyPlayer != null) {
+                // Hazırlanmış komşu oynatıcıyı aktif hale getir.
+                player = readyPlayer;

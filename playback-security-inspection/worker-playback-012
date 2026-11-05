@@ -1,0 +1,126 @@
+        id: broadcast.source_id,
+        source_url: broadcast.source_url,
+        status: broadcast.source_status
+      };
+    }
+
+    if (!source) {
+      return json({ ok: false, error: "Stream not found" }, 404);
+    }
+
+    const playback = await issuePlayback(
+      env,
+      member,
+      auth.deviceId,
+      source,
+      broadcastId
+    );
+
+    if (playback.error) {
+      return json({ ok: false, error: playback.error }, 403);
+    }
+
+    return json({ ok: true, ...playback });
+  }
+
+  return json({ ok: false, error: "Member endpoint not found" }, 404);
+}
+
+/* =========================================================
+   MAIN ROUTER
+   ========================================================= */
+
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    const path = url.pathname;
+    const method = request.method.toUpperCase();
+
+    const configuredOrigins = (env.APP_ORIGINS || "")
+      .split(",")
+      .map(x => x.trim())
+      .filter(Boolean);
+
+    const origin = request.headers.get("Origin") || "";
+    const allowOrigin = configuredOrigins.length
+      ? (configuredOrigins.includes(origin) ? origin : "")
+      : "*";
+
+    const cors = {
+      "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, OPTIONS",
+      "Access-Control-Allow-Headers": "Authorization, Content-Type, Range",
+      "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges",
+      "Vary": "Origin"
+    };
+
+    if (allowOrigin) cors["Access-Control-Allow-Origin"] = allowOrigin;
+
+    if (method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: cors
+      });
+    }
+
+    try {
+      if (path === "/health" && method === "GET") {
+        return json({
+          ok: true,
+          version: VERSION,
+          service: "stream-access-service"
+        }, 200, cors);
+      }
+
+      if (path.startsWith("/play/") && method === "GET") {
+        const ticket = path.slice("/play/".length);
+        return proxyMedia(request, env, ticket, cors);
+      }
+
+      if (path.startsWith("/p/") && method === "GET") {
+        const ticket = path.slice("/p/".length);
+        return proxyMedia(request, env, ticket, cors);
+      }
+
+      if (path.startsWith("/auth/") && method === "POST") {
+        return handleLogin(request, env, path);
+      }
+
+      if (path.startsWith("/admin/")) {
+        const admin = await adminAuth(request, env);
+        if (!admin) {
+          return json({ ok: false, error: "Unauthorized" }, 401, cors);
+        }
+
+        if (path.startsWith("/admin/github/")) {
+          return handleGithub(request, env, url, method);
+        }
+
+        return handleAdmin(request, env, path, method);
+      }
+
+      if (path.startsWith("/member/")) {
+        const auth = await memberAuth(request, env);
+        if (!auth) {
+          return json({ ok: false, error: "Unauthorized" }, 401, cors);
+        }
+
+        return handleMember(request, env, path, method, auth);
+      }
+
+      return json({ ok: false, error: "Not found" }, 404, cors);
+    } catch (error) {
+      // Safe diagnostics: never log request bodies, passwords or tokens.
+      console.error("WORKER_REQUEST_ERROR", JSON.stringify({
+        path,
+        method,
+        name: error?.name || "Error",
+        message: String(error?.message || error).slice(0, 1000)
+      }));
+
+      return json({
+        ok: false,
+        error: "Internal server error"
+      }, 500, cors);
+    }
+  }
+};

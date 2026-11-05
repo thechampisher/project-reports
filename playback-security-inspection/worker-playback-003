@@ -1,0 +1,160 @@
+  const data = encoder.encode(JSON.stringify({
+    ...payload,
+    exp: nowSeconds() + lifetime,
+    ver: 1
+  }));
+
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+
+  const encrypted = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    await mediaKey(env),
+    data
+  );
+
+  return `${b64url(iv)}.${b64url(new Uint8Array(encrypted))}`;
+}
+
+async function readMediaToken(token, env) {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 2) return null;
+
+    const decrypted = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: unb64url(parts[0]) },
+      await mediaKey(env),
+      unb64url(parts[1])
+    );
+
+    const payload = JSON.parse(decoder.decode(decrypted));
+
+    if (payload.ver !== 1 ||
+        !payload.exp ||
+        payload.exp <= nowSeconds()) return null;
+
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+async function makeResourceUrl(sourceUrl, env, session) {
+  if (!allowedSource(sourceUrl, env)) {
+    throw new Error("Source host is not allowed");
+  }
+
+  // Playlist kaynakları oturum kontrolünden geçer.
+  // Segment ve medya kaynakları stateless kalır.
+  const kind = isManifest(sourceUrl, "")
+    ? "manifest"
+    : "resource";
+
+  const token = await createMediaToken({
+    kind,
+    url: sourceUrl,
+    sid: session.sid,
+    member_id: session.member_id,
+    device_id: session.device_id
+  }, env, PLAYBACK_TOKEN_SECONDS);
+
+  return `/p/${token}`;
+}
+
+function isManifest(url, contentType) {
+  return /\.m3u8?($|\?)/i.test(url) ||
+    /mpegurl|vnd\.apple\.mpegurl/i.test(contentType || "");
+}
+
+async function rewriteManifest(text, baseUrl, env, session) {
+  const lines = text.split(/\r?\n/);
+  const output = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      output.push(line);
+      continue;
+    }
+
+    if (trimmed.startsWith("#")) {
+      const rewritten = await rewriteUriAttributes(
+        line, baseUrl, env, session
+      );
+      output.push(rewritten);
+      continue;
+    }
+
+    const absolute = new URL(trimmed, baseUrl).toString();
+    output.push(await makeResourceUrl(absolute, env, session));
+  }
+
+  return output.join("\n");
+}
+
+async function rewriteUriAttributes(line, baseUrl, env, session) {
+  const regex = /URI="([^"]+)"/g;
+  let result = line;
+  const matches = [...line.matchAll(regex)];
+
+  for (const match of matches) {
+    const original = match[1];
+    const absolute = new URL(original, baseUrl).toString();
+    const replacement = await makeResourceUrl(absolute, env, session);
+    result = result.replace(
+      `URI="${original}"`,
+      `URI="${replacement}"`
+    );
+  }
+
+  return result;
+}
+
+function mediaResponseHeaders(upstream, manifest = false, cors = {}) {
+  const headers = new Headers(cors);
+
+  const type = upstream.headers.get("Content-Type");
+  if (type) headers.set("Content-Type", type);
+
+  for (const name of [
+    "Content-Range",
+    "Accept-Ranges",
+    "Content-Length"
+  ]) {
+    const value = upstream.headers.get(name);
+    if (value && !manifest) headers.set(name, value);
+  }
+
+  headers.set("Cache-Control", "private, no-store");
+  headers.set("X-Content-Type-Options", "nosniff");
+
+  return headers;
+}
+
+async function activePlaybackSession(env, payload) {
+  if (!payload?.sid || !payload?.member_id || !payload?.device_id) {
+    return false;
+  }
+
+  // Bu sorgu yalnızca ana/alt oynatma listelerinde çalışır.
+  // Video segmentleri bu fonksiyona uğramaz.
+  const session = await env.DB.prepare(`
+    SELECT ps.id
+    FROM playback_sessions ps
+    JOIN members m
+      ON m.id = ps.member_id
+    JOIN devices d
+      ON d.member_id = ps.member_id
+     AND d.device_id = ps.device_id
+    LEFT JOIN broadcasts b
+      ON b.id = ps.broadcast_id
+    WHERE ps.id = ?
+      AND ps.member_id = ?
+      AND ps.device_id = ?
+      AND ps.status = 'active'
+      AND ps.expires_at > ?
+      AND m.status = 'active'
+      AND d.status = 'active'
+      AND (
+        m.expires_at IS NULL
+        OR m.expires_at = ''

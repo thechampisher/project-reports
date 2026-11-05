@@ -1,0 +1,160 @@
+
+                    case android.view.MotionEvent.ACTION_MOVE:
+                        if (channelTransitioning) return true;
+
+                        float dx = event.getX() - startX;
+                        float dy = event.getY() - startY;
+
+                        if (Math.abs(dx) > dp(10) && Math.abs(dx) > Math.abs(dy)) {
+                            dragging = true;
+                            horizontalDrag = true;
+                            float width = Math.max(1, playerView.getWidth());
+                            float offset = Math.max(-width, Math.min(width, dx));
+                            playerView.setTranslationX(offset);
+                            if (portraitPanel != null) portraitPanel.setTranslationX(offset);
+                        } else if (Math.abs(dy) > dp(8) && Math.abs(dy) > Math.abs(dx)) {
+                            dragging = true;
+                            horizontalDrag = false;
+                            float height = Math.max(playerView.getHeight(), getResources().getDisplayMetrics().heightPixels);
+                            float offset = Math.max(-height, Math.min(height, dy));
+                            playerView.setTranslationY(offset);
+                            if (portraitPanel != null) portraitPanel.setTranslationY(offset);
+                        }
+                        if (dragging) {
+                            handler.removeCallbacks(hideChannelButton);
+                            channelButton.setVisibility(View.GONE);
+                        }
+                        return true;
+
+                    case android.view.MotionEvent.ACTION_UP:
+
+                        float moveY = event.getY() - startY;
+                        float moveX = event.getX() - startX;
+
+                        if (dragging) {
+                            if (horizontalDrag) {
+                                float threshold = Math.max(dp(70), playerView.getWidth() * 0.18f);
+                                if (Math.abs(moveX) >= threshold) finishChannelSwipe(moveX < 0 ? 1 : -1, true);
+                                else animateViewsBack(true);
+                            } else {
+                                float threshold = Math.max(dp(90), playerView.getHeight() * 0.22f);
+                                if (Math.abs(moveY) >= threshold) finishChannelSwipe(moveY < 0 ? 1 : -1, false);
+                                else animateViewsBack(false);
+                            }
+                        } else if (Math.abs(moveX) < dp(30) &&
+                                   Math.abs(moveY) < dp(30)) {
+                            // Dokunma ile kanal listesi açılmaz.
+                            // Kanal değiştirme kaydırma hareketi korunur.
+                            channelButton.setVisibility(View.GONE);
+                        }
+
+                        dragging = false;
+                        horizontalDrag = false;
+                        return true;
+
+                    case android.view.MotionEvent.ACTION_CANCEL:
+                        if (dragging) animateViewsBack(horizontalDrag);
+                        dragging = false;
+                        horizontalDrag = false;
+                        return true;
+                }
+                return true;
+            }
+        });
+
+        root.addView(channelTapLayer, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+        ));
+
+        status = new TextView(this);
+        status.setTextColor(Color.WHITE);
+        status.setTextSize(15);
+        status.setGravity(Gravity.CENTER);
+        status.setBackgroundColor(0x99000000);
+        status.setVisibility(View.GONE);
+
+        root.addView(status, new FrameLayout.LayoutParams(
+                -2, -2, Gravity.CENTER
+        ));
+
+        loadingSpinner = new android.widget.ProgressBar(
+                this, null, android.R.attr.progressBarStyleLarge
+        );
+        loadingSpinner.setIndeterminate(true);
+        loadingSpinner.setIndeterminateTintList(
+                android.content.res.ColorStateList.valueOf(Color.RED)
+        );
+        loadingSpinner.setVisibility(View.GONE);
+
+        FrameLayout.LayoutParams spinnerParams =
+                new FrameLayout.LayoutParams(dp(54), dp(54), Gravity.CENTER);
+        root.addView(loadingSpinner, spinnerParams);
+
+        channelButton = new Button(this);
+        channelButton.setText("KANAL LİSTESİ");
+        channelButton.setTextSize(12);
+        channelButton.setAllCaps(false);
+
+        channelButton.setTextColor(Color.WHITE);
+        channelButton.setPadding(dp(18), dp(8), dp(18), dp(8));
+
+        android.graphics.drawable.GradientDrawable buttonBackground =
+            new android.graphics.drawable.GradientDrawable();
+        buttonBackground.setColor(0xCC18263A);
+        buttonBackground.setCornerRadius(dp(24));
+        buttonBackground.setStroke(dp(1), 0x66FFFFFF);
+
+        channelButton.setBackground(buttonBackground);
+        channelButton.setElevation(dp(8));
+        channelButton.setOnClickListener(v -> showChannelList());
+        channelButton.setVisibility(View.GONE);
+
+        FrameLayout.LayoutParams buttonParams =
+                new FrameLayout.LayoutParams(
+                        -2, dp(46),
+                        Gravity.TOP | Gravity.LEFT
+                );
+
+        buttonParams.setMargins(dp(16), dp(18), 0, 0);
+        root.addView(channelButton, buttonParams);
+
+        if (shouldShowTvLogo()) {
+            try {
+                logo = new ImageView(this);
+
+                try (java.io.InputStream input =
+                        getAssets().open("isa-tv-hd/assets/logo.png")) {
+                    logo.setImageBitmap(
+                            BitmapFactory.decodeStream(input)
+                    );
+                }
+
+                boolean portraitLogo =
+                        getResources().getConfiguration().orientation == 1;
+
+                logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                logo.setPadding(
+                        portraitLogo ? 0 : dp(5),
+                        portraitLogo ? 0 : dp(5),
+                        portraitLogo ? 0 : dp(5),
+                        portraitLogo ? 0 : dp(5));
+                logo.setBackgroundColor(
+                        portraitLogo ? Color.TRANSPARENT : 0x880F0F0F);
+                logo.setContentDescription("İSA TV HD");
+
+                FrameLayout.LayoutParams logoParams =
+                        new FrameLayout.LayoutParams(
+                                portraitLogo ? dp(68) : dp(130),
+                                portraitLogo ? dp(42) : dp(80),
+                                Gravity.TOP | Gravity.RIGHT);
+                logoParams.setMargins(
+                        0,
+                        portraitLogo ? dp(8) : dp(12),
+                        portraitLogo ? dp(8) : dp(12),
+                        0);
+
+                View videoContent = playerView.getChildAt(0);
+                if (videoContent instanceof FrameLayout) {
+                    ((FrameLayout) videoContent).addView(logo, logoParams);
+                    // Yayının sol alt köşesindeki reklam/QR işaretini kapat.

@@ -1,0 +1,160 @@
+            if (season > 0 && episode > 0) {
+                episodeInfo = "Sezon " + season + "  ·  " + episode + ". Bölüm";
+            } else if (season > 0) {
+                episodeInfo = "Sezon " + season;
+            } else {
+                episodeInfo = episode + ". Bölüm";
+            }
+
+            episodeView.setText(episodeInfo);
+
+            boolean landscape =
+                    getResources().getConfiguration().orientation
+                    == Configuration.ORIENTATION_LANDSCAPE;
+
+            episodeView.setVisibility(View.VISIBLE);
+
+            if (landscape) {
+                infoHandler.postDelayed(hideEpisodeInfo, 5000L);
+            }
+        } else {
+            episodeView.setVisibility(View.GONE);
+        }
+    }
+
+    private String currentFavoriteId(JSONObject item) {
+        boolean series = item.optBoolean("is_series", false)
+                || "series".equalsIgnoreCase(item.optString("type", ""))
+                || item.optInt("season", 0) > 0;
+
+        String parentId = item.optString("series_id",
+                item.optString("parent_id", ""));
+        if (series) {
+            String parentName = item.optString("series_name",
+                    item.optString("name", "İSAFLIX dizisi"));
+            return "series:" + (parentId.isEmpty() ? parentName : parentId);
+        }
+
+        String id = item.optString("id", "");
+        return "movie:" + (id.isEmpty()
+                ? item.optString("url", "") : id);
+    }
+
+    private void updateFavoriteButton() {
+        if (favoriteButton == null || queue.isEmpty()) return;
+
+        int index = player == null ? 0 : player.getCurrentMediaItemIndex();
+        if (index < 0 || index >= queue.size()) index = 0;
+
+        JSONObject item = queue.get(index);
+        String favoriteId = currentFavoriteId(item);
+        android.content.SharedPreferences prefs =
+                getSharedPreferences("isa_tv_data", MODE_PRIVATE);
+
+        boolean saved = false;
+        try {
+            JSONArray favorites = new JSONArray(
+                    prefs.getString("isaflix_favorites", "[]"));
+            for (int i = 0; i < favorites.length(); i++) {
+                JSONObject favorite = favorites.optJSONObject(i);
+                if (favorite != null
+                        && favoriteId.equals(favorite.optString("favorite_id", ""))) {
+                    saved = true;
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            android.util.Log.e("ISAFLIX", "Favoriler okunamadı", e);
+        }
+
+        favoriteButton.setText(saved ? "♥" : "♡");
+        favoriteButton.setTextColor(saved ? 0xFFFF3B55 : Color.WHITE);
+        favoriteButton.setContentDescription(
+                saved ? "Favorilerden çıkar" : "Favorilere ekle");
+    }
+
+    private void toggleCurrentFavorite() {
+        if (queue.isEmpty()) return;
+
+        int index = player == null ? 0 : player.getCurrentMediaItemIndex();
+        if (index < 0 || index >= queue.size()) index = 0;
+
+        JSONObject item = queue.get(index);
+        String favoriteId = currentFavoriteId(item);
+        boolean series = favoriteId.startsWith("series:");
+
+        android.content.SharedPreferences prefs =
+                getSharedPreferences("isa_tv_data", MODE_PRIVATE);
+
+        try {
+            JSONArray old = new JSONArray(
+                    prefs.getString("isaflix_favorites", "[]"));
+            JSONArray updated = new JSONArray();
+            boolean existed = false;
+
+            for (int i = 0; i < old.length(); i++) {
+                JSONObject favorite = old.optJSONObject(i);
+                if (favorite == null) continue;
+
+                if (favoriteId.equals(favorite.optString("favorite_id", ""))) {
+                    existed = true;
+                } else {
+                    updated.put(favorite);
+                }
+            }
+
+            if (!existed) {
+                JSONObject record = new JSONObject();
+                record.put("favorite_id", favoriteId);
+                record.put("name", series
+                        ? item.optString("series_name",
+                            item.optString("name", "İSAFLIX dizisi"))
+                        : item.optString("name", "İSAFLIX filmi"));
+                record.put("url", series
+                        ? item.optString("series_url",
+                            item.optString("url", ""))
+                        : item.optString("url", ""));
+                record.put("logo", item.optString("logo",
+                        item.optString("poster", "")));
+                record.put("type", series ? "series" : "movie");
+                record.put("is_series", series);
+                if (series) {
+                    record.put("series_id",
+                            item.optString("series_id",
+                                item.optString("parent_id", "")));
+                }
+                updated.put(record);
+            }
+
+            prefs.edit().putString("isaflix_favorites",
+                    updated.toString()).apply();
+            updateFavoriteButton();
+
+        } catch (Exception e) {
+            android.util.Log.e("ISAFLIX", "Favori kaydedilemedi", e);
+        }
+    }
+
+    private void createTvLogo() {
+        Configuration c = getResources().getConfiguration();
+
+        boolean landscape =
+                c.orientation == Configuration.ORIENTATION_LANDSCAPE;
+        boolean television =
+                (c.uiMode & Configuration.UI_MODE_TYPE_MASK)
+                        == Configuration.UI_MODE_TYPE_TELEVISION;
+        boolean tablet = c.smallestScreenWidthDp >= 600;
+
+        if (!landscape || (!television && !tablet)) return;
+
+        try {
+            logo = new ImageView(this);
+
+            try (java.io.InputStream input =
+                         getAssets().open("isa-tv-hd/assets/logo.png")) {
+                logo.setImageBitmap(BitmapFactory.decodeStream(input));
+            }
+
+            logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            logo.setPadding(dp(5), dp(5), dp(5), dp(5));
+            logo.setBackgroundColor(0x880F0F0F);

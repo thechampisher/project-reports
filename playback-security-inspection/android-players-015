@@ -1,0 +1,160 @@
+    TextView count = new TextView(this);
+    count.setTextColor(0xFFAAAAAA);
+    count.setTextSize(12);
+    count.setPadding(dp(8), dp(8), dp(8), dp(8));
+    root.addView(count);
+
+    BaseAdapter adapter = new BaseAdapter() {
+        @Override public int getCount() {
+            return visibleItems.size();
+        }
+
+        @Override public Object getItem(int position) {
+            return channels.get(visibleItems.get(position));
+        }
+
+        @Override public long getItemId(int position) {
+            return visibleItems.get(position);
+        }
+
+        @Override public View getView(int position, View recycled,
+                                      android.view.ViewGroup parent) {
+            LinearLayout row;
+            ImageView icon;
+            LinearLayout texts;
+            TextView name;
+            TextView subtitle;
+
+            if (recycled instanceof LinearLayout) {
+                row = (LinearLayout) recycled;
+                icon = (ImageView) row.getChildAt(0);
+                texts = (LinearLayout) row.getChildAt(1);
+                name = (TextView) texts.getChildAt(0);
+                subtitle = (TextView) texts.getChildAt(1);
+            } else {
+                row = new LinearLayout(PlayerActivity.this);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setPadding(dp(10), dp(8), dp(10), dp(8));
+                row.setMinimumHeight(dp(isPortraitMode() ? 60 : 32));
+
+                icon = new ImageView(PlayerActivity.this);
+                icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                row.addView(icon, new LinearLayout.LayoutParams(
+                        dp(isPortraitMode() ? 46 : 26),
+                        dp(isPortraitMode() ? 46 : 26)));
+
+                texts = new LinearLayout(PlayerActivity.this);
+                texts.setOrientation(LinearLayout.VERTICAL);
+                texts.setPadding(dp(12), 0, 0, 0);
+
+                name = new TextView(PlayerActivity.this);
+                name.setTextColor(Color.WHITE);
+                name.setTextSize(isPortraitMode() ? 14 : 12);
+                name.setMaxLines(1);
+                name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+
+                subtitle = new TextView(PlayerActivity.this);
+                subtitle.setTextColor(0xFFAAAAAA);
+                subtitle.setTextSize(isPortraitMode() ? 11 : 9);
+
+                texts.addView(name);
+                texts.addView(subtitle);
+                row.addView(texts, new LinearLayout.LayoutParams(
+                        0, -2, 1f));
+            }
+
+            int actual = visibleItems.get(position);
+            Channel c = channels.get(actual);
+
+            name.setText((actual == selectedIndex ? "●  " : "")
+                    + (c.name == null ? "İsimsiz kanal" : c.name));
+            subtitle.setText(actual == selectedIndex ? "ŞU ANDA OYNUYOR" : "CANLI YAYIN");
+            row.setBackgroundColor(actual == selectedIndex
+                    ? 0xFF303D50 : Color.TRANSPARENT);
+
+            icon.setImageDrawable(null);
+            if (c.logo != null && !c.logo.isEmpty()) {
+                try {
+                    new android.os.AsyncTask<Void, Void, android.graphics.Bitmap>() {
+                        @Override
+                        protected android.graphics.Bitmap doInBackground(Void... v) {
+                            try {
+                                return android.graphics.BitmapFactory.decodeStream(
+                                        new java.net.URL(c.logo).openStream());
+                            } catch (Exception e) {
+                                return null;
+                            }
+                        }
+                        @Override
+                        protected void onPostExecute(android.graphics.Bitmap bitmap) {
+                            if (bitmap != null && icon.getParent() != null) {
+                                icon.setImageBitmap(bitmap);
+                            }
+                        }
+                    }.execute();
+                } catch (Exception ignored) {}
+            }
+            return row;
+        }
+    };
+
+    Runnable updateList = () -> {
+        String group = groups.get(groupIndex[0]);
+        java.util.ArrayList<Integer> source = grouped.get(group);
+        visibleItems.clear();
+
+        String term = search.getText().toString().toLowerCase(
+                java.util.Locale.forLanguageTag("tr"));
+
+        for (Integer index : source) {
+            String name = channels.get(index).name;
+            if (name == null) name = "";
+            if (name.toLowerCase(java.util.Locale.forLanguageTag("tr"))
+                    .contains(term)) {
+                visibleItems.add(index);
+            }
+        }
+
+        groupName.setText(group + "\n" + source.size() + " KANAL");
+        count.setText(visibleItems.size() + " kanal gösteriliyor");
+        adapter.notifyDataSetChanged();
+    };
+
+    previous.setOnClickListener(v -> {
+        groupIndex[0] = (groupIndex[0] - 1 + groups.size()) % groups.size();
+        search.setText("");
+        updateList.run();
+    });
+
+    next.setOnClickListener(v -> {
+        groupIndex[0] = (groupIndex[0] + 1) % groups.size();
+        search.setText("");
+        updateList.run();
+    });
+
+    search.addTextChangedListener(new android.text.TextWatcher() {
+        @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
+        @Override public void onTextChanged(CharSequence s, int st, int before, int count) {
+            updateList.run();
+        }
+        @Override public void afterTextChanged(android.text.Editable e) {}
+    });
+
+    list.setAdapter(adapter);
+    list.setOnItemClickListener((parent, view, position, id) -> {
+        if (position < 0 || position >= visibleItems.size()) return;
+        selectedIndex = visibleItems.get(position);
+        dialog.dismiss();
+        playSelected();
+    });
+
+    root.addView(list, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+    TextView close = new TextView(this);
+    close.setText("KAPAT");
+    close.setTextColor(Color.WHITE);
+    close.setGravity(Gravity.CENTER);
+    close.setTextSize(13);
+    close.setBackgroundColor(0xFF303D50);
+    close.setPadding(0, dp(12), 0, dp(12));

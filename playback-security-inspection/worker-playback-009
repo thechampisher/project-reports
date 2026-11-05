@@ -1,0 +1,160 @@
+
+    await env.DB.batch(statements);
+    await audit(env, "broadcast_started", broadcastId, {
+      audience,
+      recipient_count: recipientCount
+    });
+
+    return json({
+      ok: true,
+      broadcast_id: broadcastId,
+      audience,
+      recipient_count: audience === "all" ? "all-active-members" : recipientCount
+    }, 201);
+  }
+
+  if (method === "POST" && path === "/admin/broadcast/stop") {
+    const body = await readJson(request);
+    const requestedId = String(body?.broadcast_id || "").trim();
+
+    const active = requestedId
+      ? await env.DB.prepare(`
+          SELECT id FROM broadcasts
+          WHERE id = ? AND status = 'live'
+          LIMIT 1
+        `).bind(requestedId).first()
+      : await env.DB.prepare(`
+          SELECT id FROM broadcasts
+          WHERE status = 'live'
+          ORDER BY started_at DESC, created_at DESC
+          LIMIT 1
+        `).first();
+
+    if (!active) {
+      return json({ ok: false, error: "Aktif yayın bulunamadı." }, 404);
+    }
+
+    const id = active.id;
+
+    await env.DB.batch([
+      env.DB.prepare(`
+        UPDATE broadcasts
+        SET status = 'stopped',
+            stopped_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND status = 'live'
+      `).bind(id),
+
+      env.DB.prepare(`
+        UPDATE playback_sessions
+        SET status = 'revoked'
+        WHERE broadcast_id = ? AND status = 'active'
+      `).bind(id),
+
+      env.DB.prepare(`
+        UPDATE broadcast_recipients
+        SET status = 'ended', ended_at = CURRENT_TIMESTAMP
+        WHERE broadcast_id = ? AND status IN ('targeted', 'authorized')
+      `).bind(id)
+    ]);
+
+    await audit(env, "broadcast_stopped", id);
+    return json({ ok: true, broadcast_id: id, stopped: true });
+  }
+
+  if (method === "GET" && path === "/admin/broadcast") {
+    const result = await env.DB.prepare(`
+      SELECT b.id, b.title, b.message, b.audience, b.status,
+             b.started_at, b.stopped_at, b.created_at,
+             s.name AS stream_name
+      FROM broadcasts b
+      LEFT JOIN stream_sources s ON s.id = b.stream_source_id
+      ORDER BY b.created_at DESC
+      LIMIT 100
+    `).all();
+
+    return json({ ok: true, broadcasts: result.results || [] });
+  }
+
+  if (method === "GET" && path === "/admin/audit") {
+    const result = await env.DB.prepare(`
+      SELECT id, actor_type, actor_id, action,
+             target_type, target_id, details, created_at
+      FROM audit_logs
+      ORDER BY created_at DESC
+      LIMIT 500
+    `).all();
+
+    return json({ ok: true, logs: result.results || [] });
+  }
+
+  return json({ ok: false, error: "Admin endpoint not found" }, 404);
+}
+
+/* =========================================================
+   PRIVATE GITHUB API
+   Token is read only from Worker environment secrets.
+   APK and member responses never receive the token.
+   ========================================================= */
+
+function allowedGithubRepos(env) {
+  return (env.GITHUB_ALLOWED_REPOS || "")
+    .split(",")
+    .map(x => x.trim())
+    .filter(x => /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(x));
+}
+
+function checkGithubRepo(repo, env) {
+  return allowedGithubRepos(env).includes(repo);
+}
+
+function cleanGithubPath(path) {
+  const value = String(path || "").replace(/^\/+/, "");
+
+  if (!value ||
+      value.split("/").some(part =>
+        !part || part === "." || part === ".." ||
+        part.includes("\\")
+      )) return null;
+
+  return value;
+}
+
+function isGithubPathWritable(path) {
+  if (!path) return false;
+
+  const parts = path.split("/").map(x => x.toLowerCase());
+  const filename = parts[parts.length - 1];
+
+  if (parts.some(x => x === ".github" || x === ".git")) {
+    return false;
+  }
+
+  const protectedFiles = new Set([
+    "codeowners",
+    ".gitmodules",
+    "security.md",
+    "dependabot.yml",
+    "dependabot.yaml"
+  ]);
+
+  if (protectedFiles.has(filename)) return false;
+
+  return true;
+}
+
+async function githubRequest(env, path, options = {}) {
+  if (!env.GITHUB_TOKEN) {
+    throw new Error("GitHub token is not configured");
+  }
+
+  const response = await fetch(`https://api.github.com${path}`, {
+    ...options,
+    headers: {
+      "Accept": "application/vnd.github+json",
+      "Authorization": `Bearer ${env.GITHUB_TOKEN}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+      "User-Agent": "Private-Content-Manager",
+      ...(options.headers || {})
+    }
+  });

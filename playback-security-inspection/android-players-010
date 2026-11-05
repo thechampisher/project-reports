@@ -1,0 +1,160 @@
+                } else {
+                    root.addView(logo, logoParams);
+                }
+
+            } catch (Exception e) {
+                Log.e(TAG, "Logo yüklenemedi", e);
+            }
+        }
+
+        // Dikey Shorts bilgi ve favori katmanı
+        portraitPanel = new LinearLayout(this);
+        portraitPanel.setOrientation(LinearLayout.VERTICAL);
+        portraitPanel.setPadding(dp(14), dp(10), dp(14), dp(12));
+        portraitPanel.setBackgroundColor(0x99000000);
+
+        LinearLayout channelInfo = new LinearLayout(this);
+        channelInfo.setOrientation(LinearLayout.HORIZONTAL);
+        channelInfo.setGravity(Gravity.CENTER_VERTICAL);
+
+        portraitChannelName = new TextView(this);
+        portraitChannelName.setTextColor(Color.WHITE);
+        portraitChannelName.setTextSize(18);
+        portraitChannelName.setTypeface(null, android.graphics.Typeface.BOLD);
+        portraitChannelName.setMaxLines(4);
+        portraitChannelName.setEllipsize(null);
+
+        LinearLayout.LayoutParams channelNameParams =
+                new LinearLayout.LayoutParams(0, -2, 1f);
+        channelInfo.addView(portraitChannelName, channelNameParams);
+
+        portraitLiveBadge = new TextView(this);
+        portraitLiveBadge.setText("● CANLI");
+        portraitLiveBadge.setTextColor(Color.WHITE);
+        portraitLiveBadge.setTextSize(11);
+        portraitLiveBadge.setTypeface(null, android.graphics.Typeface.BOLD);
+        portraitLiveBadge.setPadding(dp(9), dp(5), dp(9), dp(5));
+        GradientDrawable liveBadgeBg = new GradientDrawable();
+        liveBadgeBg.setColor(0xFF18263A);
+        liveBadgeBg.setCornerRadius(dp(5));
+        portraitLiveBadge.setBackground(liveBadgeBg);
+        LinearLayout.LayoutParams liveBadgeParams = new LinearLayout.LayoutParams(-2, -2);
+        liveBadgeParams.bottomMargin = dp(4);
+        portraitPanel.addView(portraitLiveBadge, liveBadgeParams);
+        portraitPanel.addView(channelInfo);
+
+        portraitEpisodeInfo = new TextView(this);
+        portraitEpisodeInfo.setTextColor(0xFFE0E0E0);
+        portraitEpisodeInfo.setTextSize(12);
+        portraitEpisodeInfo.setPadding(dp(2), dp(2), dp(2), 0);
+        portraitEpisodeInfo.setVisibility(View.GONE);
+        portraitPanel.addView(portraitEpisodeInfo);
+
+        favoriteButton = new Button(this);
+        favoriteButton.setTextSize(23);
+        favoriteButton.setTextColor(Color.WHITE);
+        favoriteButton.setAllCaps(false);
+        favoriteButton.setMinWidth(dp(52));
+        favoriteButton.setMinimumWidth(dp(52));
+        favoriteButton.setPadding(0, 0, 0, 0);
+        favoriteButton.setBackgroundColor(0x00000000);
+        favoriteButton.setOnClickListener(v -> toggleCurrentFavorite());
+
+        LinearLayout.LayoutParams favoriteParams =
+                new LinearLayout.LayoutParams(dp(54), dp(48));
+        favoriteParams.topMargin = dp(3);
+        portraitPanel.addView(favoriteButton, favoriteParams);
+
+        FrameLayout.LayoutParams portraitParams =
+                new FrameLayout.LayoutParams(
+                        dp(300), -2,
+                        Gravity.BOTTOM | Gravity.LEFT
+                );
+        portraitParams.setMargins(dp(10), 0, dp(10), dp(24));
+        root.addView(portraitPanel, portraitParams);
+
+        portraitWarning = new TextView(this);
+        portraitWarning.setText(
+                "Kanalları izlemek için lütfen ekranı yatay konuma döndürün."
+        );
+        portraitWarning.setTextColor(Color.WHITE);
+        portraitWarning.setTextSize(18);
+        portraitWarning.setTypeface(
+                null, android.graphics.Typeface.BOLD
+        );
+        portraitWarning.setGravity(Gravity.CENTER);
+        portraitWarning.setPadding(
+                dp(20), dp(18), dp(20), dp(18)
+        );
+
+        GradientDrawable warningBackground = new GradientDrawable();
+        warningBackground.setColor(0xE6A50018);
+        warningBackground.setCornerRadius(dp(14));
+        warningBackground.setStroke(dp(1), 0x99FFFFFF);
+
+        portraitWarning.setBackground(warningBackground);
+        portraitWarning.setVisibility(View.GONE);
+        portraitWarning.setElevation(dp(14));
+
+        FrameLayout.LayoutParams warningParams =
+                new FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.WRAP_CONTENT,
+                        Gravity.CENTER
+                );
+
+        warningParams.setMargins(
+                dp(22), dp(18), dp(22), dp(18)
+        );
+
+        root.addView(portraitWarning, warningParams);
+
+        updatePortraitOverlay();
+
+        setContentView(root);
+    }
+
+    
+    private void initializePlayer() {
+        player = createManagedPlayer(false);
+        playerView.setPlayer(player);
+    }
+
+
+    private ExoPlayer createManagedPlayer(boolean preload) {
+        DefaultLoadControl loadControl =
+                new DefaultLoadControl.Builder()
+                        .setBufferDurationsMs(
+                                15000,
+                                60000,
+                                1000,
+                                3000
+                        )
+                        .setPrioritizeTimeOverSizeThresholds(true)
+                        .build();
+
+        ExoPlayer p = new ExoPlayer.Builder(this)
+                .setLoadControl(loadControl)
+                .build();
+
+        p.setVolume(preload ? 0f : 1f);
+
+        p.setTrackSelectionParameters(
+                p.getTrackSelectionParameters()
+                        .buildUpon()
+                        .setMaxVideoBitrate(
+                                preload ? 1500000 : Integer.MAX_VALUE
+                        )
+                        .build()
+        );
+
+        Handler retryHandler = new Handler(Looper.getMainLooper());
+        final int[] retryCount = {0};
+
+        Runnable[] retryTask = new Runnable[1];
+
+        retryTask[0] = () -> {
+            if (p != player || p.isReleased()) return;
+
+            if (retryCount[0] >= 5) {
+                Log.e(TAG, "Canlı yayın yeniden bağlanma denemeleri tükendi.");

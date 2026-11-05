@@ -1,0 +1,160 @@
+    close.setOnClickListener(v -> dialog.dismiss());
+
+    LinearLayout.LayoutParams closeParams =
+            new LinearLayout.LayoutParams(-1, dp(isPortraitMode() ? 46 : 34));
+    closeParams.topMargin = dp(4);
+    root.addView(close, closeParams);
+
+    updateList.run();
+
+    int selectedPosition = visibleItems.indexOf(selectedIndex);
+    if (selectedPosition >= 0) {
+        list.setSelection(selectedPosition);
+    }
+
+    dialog.setContentView(root);
+    dialog.setCancelable(true);
+    dialog.setOnDismissListener(d -> {
+        if (channelDialog == dialog) channelDialog = null;
+    });
+    dialog.show();
+
+    if (dialog.getWindow() != null) {
+        dialog.getWindow().setBackgroundDrawableResource(
+                android.R.color.transparent);
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        int screenHeight = getResources().getDisplayMetrics().heightPixels;
+        int panelWidth = isPortraitMode()
+                ? (int)(screenWidth * 0.94f)
+                : Math.min(dp(430), (int)(screenWidth * 0.42f));
+
+        dialog.getWindow().setLayout(
+                panelWidth,
+                (int)(screenHeight * 0.96f));
+        dialog.getWindow().setGravity(
+                Gravity.LEFT | Gravity.CENTER_VERTICAL);
+        dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        WindowManager.LayoutParams params = dialog.getWindow().getAttributes();
+        params.dimAmount = 0.72f;
+        dialog.getWindow().setAttributes(params);
+    }
+}
+
+
+
+    private boolean shouldShowTvLogo() {
+        return true;
+    }
+
+    private int dp(float value) {
+        return (int) (
+                value * getResources().getDisplayMetrics().density
+                + 0.5f
+        );
+    }
+
+    @Override
+    public void onBackPressed() {
+        super.onBackPressed();
+    }
+
+    
+
+    
+
+    
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        outState.putInt("isa_saved_channel_index", selectedIndex);
+        super.onSaveInstanceState(outState);
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+
+        // Mevcut ExoPlayer ve video yüzeyini değiştirme.
+        // Böylece yayın bağlantısı yeniden kurulmaz.
+        if (channelDialog != null && channelDialog.isShowing()) {
+            channelDialog.dismiss();
+        }
+
+        if (logo != null &&
+                logo.getLayoutParams() instanceof FrameLayout.LayoutParams) {
+            boolean portrait = isPortraitMode();
+
+            FrameLayout.LayoutParams lp =
+                    (FrameLayout.LayoutParams) logo.getLayoutParams();
+
+            lp.width = dp(portrait ? 68 : 130);
+            lp.height = dp(portrait ? 42 : 80);
+            lp.gravity = Gravity.TOP | Gravity.RIGHT;
+            lp.setMargins(
+                    0,
+                    dp(portrait ? 8 : 12),
+                    dp(portrait ? 8 : 12),
+                    0);
+
+            logo.setLayoutParams(lp);
+            logo.setPadding(
+                    portrait ? 0 : dp(5),
+                    portrait ? 0 : dp(5),
+                    portrait ? 0 : dp(5),
+                    portrait ? 0 : dp(5));
+            logo.setBackgroundColor(
+                    portrait ? Color.TRANSPARENT : 0x880F0F0F);
+        }
+
+        updatePortraitOverlay();
+
+        applyPreloadPolicy();
+
+        if (channelButton != null) {
+            channelButton.setVisibility(View.GONE);
+        }
+        applyImmersiveMode();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+
+        handler.removeCallbacks(neighborPreloadTimeout);
+        stopNeighborPreloads();
+
+        if (player != null) player.pause();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        if (player != null) {
+            applyPreloadPolicy();
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (activeBroadcastPlayer == this) {
+            activeBroadcastPlayer = null;
+        }
+        handler.removeCallbacksAndMessages(null);
+
+        if (playerView != null) {
+            playerView.setPlayer(null);
+        }
+
+        java.util.HashSet<ExoPlayer> allPlayers =
+                new java.util.HashSet<>();
+
+        if (player != null) allPlayers.add(player);
+        allPlayers.addAll(preloadedPlayers.values());
+        allPlayers.addAll(standbyPlayers);
+
+        preloadedPlayers.clear();
+        standbyPlayers.clear();
+
+        for (ExoPlayer p : allPlayers) {
+            try {

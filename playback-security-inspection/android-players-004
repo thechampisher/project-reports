@@ -1,0 +1,160 @@
+                        || value.isEmpty()
+                        || value.contains("\r")
+                        || value.contains("\n")) {
+                    continue;
+                }
+
+                if (key.equalsIgnoreCase("User-Agent")) {
+                    userAgent = value;
+                } else {
+                    headers.put(key, value);
+                }
+            }
+        }
+
+        DefaultHttpDataSource.Factory factory =
+                new DefaultHttpDataSource.Factory()
+                        .setUserAgent(userAgent)
+                        .setConnectTimeoutMs(20000)
+                        .setReadTimeoutMs(60000)
+                        .setAllowCrossProtocolRedirects(true)
+                        .setDefaultRequestProperties(headers);
+
+        MediaItem mediaItem = new MediaItem.Builder()
+                .setUri(Uri.parse(url))
+                .setMediaId(entry.optString("name", url))
+                .build();
+
+        String path = Uri.parse(url).getPath();
+        path = path == null ? "" : path.toLowerCase();
+        String lowerUrl = url.toLowerCase(java.util.Locale.ROOT);
+        boolean isHls = path.endsWith(".m3u8")
+                || lowerUrl.matches("(?s).*\\.m3u8(?:[?#].*)?$")
+                || lowerUrl.contains("format=m3u8")
+                || lowerUrl.contains("type=hls");
+        boolean isDash = path.endsWith(".mpd")
+                || lowerUrl.matches("(?s).*\\.mpd(?:[?#].*)?$")
+                || lowerUrl.contains("format=mpd")
+                || lowerUrl.contains("type=dash");
+
+        if (isHls) {
+            return new HlsMediaSource.Factory(factory)
+                    .setAllowChunklessPreparation(true)
+                    .createMediaSource(mediaItem);
+        }
+
+        if (isDash) {
+            return new DashMediaSource.Factory(factory)
+                    .createMediaSource(mediaItem);
+        }
+
+        return new DefaultMediaSourceFactory(factory)
+                .createMediaSource(mediaItem);
+    }
+
+    private void initializePlayer() {
+        try {
+            ArrayList<MediaSource> sources = new ArrayList<>();
+
+            for (JSONObject item : queue) {
+                MediaSource videoSource = createMediaSource(item);
+                String audioUrl = item.optString("audio_url", "");
+                if (!audioUrl.isEmpty()) {
+                    JSONObject audioItem = new JSONObject(item.toString());
+                    audioItem.put("url", audioUrl);
+                    audioItem.remove("audio_url");
+                    MediaSource audioSource = createMediaSource(audioItem);
+                    sources.add(new MergingMediaSource(true, videoSource, audioSource));
+                } else {
+                    sources.add(videoSource);
+                }
+            }
+
+            if (sources.isEmpty()) {
+                throw new IllegalStateException("Oynatma listesi boş.");
+            }
+
+            int index = getIntent().getIntExtra("selected_index", 0);
+            if (index < 0 || index >= sources.size()) index = 0;
+
+            player = new ExoPlayer.Builder(this).build();
+            playerView.setPlayer(player);
+
+            player.addListener(new Player.Listener() {
+                @Override
+                public void onPlaybackStateChanged(int state) {
+                    if (state == Player.STATE_READY) {
+                        loadingSpinner.setVisibility(View.GONE);
+                        status.setVisibility(View.GONE);
+                        playerView.showController();
+                    } else if (state == Player.STATE_BUFFERING) {
+                        status.setVisibility(View.GONE);
+                        loadingSpinner.setVisibility(View.VISIBLE);
+                    } else if (state == Player.STATE_ENDED) {
+                        loadingSpinner.setVisibility(View.GONE);
+                        status.setVisibility(View.GONE);
+                    }
+                }
+
+                @Override
+                public void onMediaItemTransition(
+                        MediaItem mediaItem, int reason) {
+                    updateTitle();
+                    updateFavoriteButton();
+                }
+
+                @Override
+                public void onPlayerError(PlaybackException error) {
+                    loadingSpinner.setVisibility(View.GONE);
+                    status.setText("İçerik şu anda oynatılamıyor.");
+                    status.setVisibility(View.VISIBLE);
+                    android.util.Log.e(
+                            "ISAFLIX", "Oynatma hatası", error
+                    );
+                }
+            });
+
+            MediaSource[] array = sources.toArray(new MediaSource[0]);
+            ConcatenatingMediaSource playlist =
+                    new ConcatenatingMediaSource(array);
+
+            player.setMediaSource(playlist);
+            player.seekTo(index, 0L);
+            player.prepare();
+            player.play();
+            updateTitle();
+            updateFavoriteButton();
+
+        } catch (Exception e) {
+            android.util.Log.e("ISAFLIX", "Oynatıcı başlatılamadı", e);
+            if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
+            status.setText("İçerik şu anda oynatılamıyor.");
+            status.setVisibility(View.VISIBLE);
+        }
+    }
+
+
+    private void updateTitle() {
+        if (player == null || queue.isEmpty()) return;
+
+        int index = player.getCurrentMediaItemIndex();
+        if (index < 0 || index >= queue.size()) index = 0;
+
+        JSONObject item = queue.get(index);
+        String name = item.optString(
+                "name",
+                getIntent().getStringExtra("channel_name")
+        );
+
+        titleView.setText(name == null ? "İSAFLIX" : name);
+
+        int season = item.optInt("season", 0);
+        int episode = item.optInt("episode", 0);
+
+        infoHandler.removeCallbacks(hideEpisodeInfo);
+
+        if (season > 0 || episode > 0) {
+            episodeView.animate().cancel();
+            episodeView.setAlpha(1f);
+
+            String episodeInfo;

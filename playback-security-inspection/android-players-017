@@ -1,0 +1,10 @@
+                p.release();
+            } catch (Exception ignored) {}
+        }
+
+        player = null;
+
+        super.onDestroy();
+    }
+
+}

@@ -1,0 +1,160 @@
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                installWebsiteDetector();
+            }
+        });
+
+        root.addView(webView, 0, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+        webView.loadUrl(pageUrl);
+
+        websiteHandler.postDelayed(() -> {
+            if (websitePlaybackMode && !websiteMediaAccepted) {
+                loadingSpinner.setVisibility(View.GONE);
+                loadingLabel.setVisibility(View.GONE);
+                status.setText("Video kaynağı bulunamadı. Site medya adresi sağlamadı.");
+                status.setVisibility(View.VISIBLE);
+            }
+        }, 30000L);
+    }
+
+
+    private boolean isAudioOnlyUrl(String url) {
+        if (url == null) return false;
+        String u = url.toLowerCase(java.util.Locale.ROOT);
+        return u.contains("/mp4a/") || u.contains("/audio/")
+                || u.matches("(?s).*\\.(aac|mp3|m4a|opus)(?:[?#].*)?$");
+    }
+
+    private void collectWebsiteMedia(String url) {
+        if (resolvingCancelled || websiteMediaAccepted || !websitePlaybackMode) return;
+        if (url == null || !url.matches("(?i)^https?://.*")) return;
+        if (!isDirectMediaUrl(url)) return;
+
+        synchronized (websiteMediaCandidates) {
+            websiteMediaCandidates.add(url);
+        }
+        android.util.Log.d("ISAFLIX", "Medya bulundu: " + url);
+        websiteHandler.removeCallbacks(websiteResolveRunnable);
+        websiteHandler.postDelayed(websiteResolveRunnable, 6000L);
+    }
+
+    private void installWebsiteDetector() {
+        if (webView == null) return;
+        String script =
+            "(function(){" +
+            "if(window.__isaDetectorInstalled)return;" +
+            "window.__isaDetectorInstalled=true;" +
+            "function send(u){try{if(u&&/^https?:\\/\\//i.test(u))" +
+            "ISAWebsiteBridge.onResource(u);}catch(e){}}" +
+            "function scanDoc(d,depth){try{" +
+            "if(!d||depth>4)return;" +
+            "var a=d.querySelectorAll('video,audio,source');" +
+            "for(var i=0;i<a.length;i++){var x=a[i];" +
+            "send(x.currentSrc||x.src||x.getAttribute('src'));" +
+            "send(x.getAttribute('data-src'));" +
+            "send(x.getAttribute('data-url'));}" +
+            "var f=d.querySelectorAll('iframe,frame');" +
+            "for(var k=0;k<f.length;k++){" +
+            "var z=f[k];send(z.src||z.getAttribute('src'));" +
+            "send(z.getAttribute('data-src'));" +
+            "try{if(z.contentDocument)scanDoc(z.contentDocument,depth+1);}catch(e){}}" +
+            "var r=d.defaultView.performance.getEntriesByType('resource');" +
+            "for(var j=0;j<r.length;j++)send(r[j].name);" +
+            "}catch(e){}}" +
+            "function scan(){scanDoc(document,0);}" +
+            "document.addEventListener('loadedmetadata',scan,true);" +
+            "document.addEventListener('canplay',scan,true);" +
+            "document.addEventListener('load',scan,true);" +
+            "try{new MutationObserver(scan).observe(document.documentElement||document," +
+            "{childList:true,subtree:true,attributes:true," +
+            "attributeFilter:['src','data-src','data-url']});}catch(e){}" +
+            "setInterval(scan,500);scan();})();";
+        webView.evaluateJavascript(script, null);
+    }
+
+    private class WebsiteBridge {
+        @JavascriptInterface
+        public void onResource(String url) {
+            collectWebsiteMedia(url);
+        }
+    }
+
+    private void finishWebsiteDetection() {
+        if (resolvingCancelled || websiteMediaAccepted || !websitePlaybackMode) return;
+
+        String video = null;
+        String audio = null;
+        synchronized (websiteMediaCandidates) {
+            for (String url : websiteMediaCandidates) {
+                String u = url.toLowerCase(java.util.Locale.ROOT);
+                if (u.contains("/mp4a/")) audio = url;
+                else if (u.contains("/avc1/")) video = url;
+            }
+            if (video == null) {
+                for (String url : websiteMediaCandidates) {
+                    if (!isAudioOnlyUrl(url)) {
+                        video = url;
+                        break;
+                    }
+                }
+            }
+        }
+        if (video != null) acceptWebsiteMedia(video, audio);
+    }
+
+    private void acceptWebsiteMedia(String mediaUrl, String audioUrl) {
+        if (resolvingCancelled || websiteMediaAccepted || !websitePlaybackMode) return;
+        if (mediaUrl == null || !isDirectMediaUrl(mediaUrl)) return;
+
+        websiteMediaAccepted = true;
+        try {
+            JSONObject item = queue.get(0);
+            item.put("url", mediaUrl);
+            if (audioUrl != null) item.put("audio_url", audioUrl);
+
+            JSONObject headers = item.optJSONObject("headers");
+            if (headers == null) headers = new JSONObject();
+            headers.put("Referer", websitePageUrl);
+            String cookie = CookieManager.getInstance().getCookie(websitePageUrl);
+            if (cookie != null && !cookie.isEmpty()) headers.put("Cookie", cookie);
+            item.put("headers", headers);
+
+            websiteHandler.removeCallbacksAndMessages(null);
+            if (webView != null) {
+                webView.stopLoading();
+                webView.loadUrl("about:blank");
+                root.removeView(webView);
+                webView.destroy();
+                webView = null;
+            }
+            websitePlaybackMode = false;
+            loadingLabel.setVisibility(View.GONE);
+            playerView.setVisibility(View.VISIBLE);
+            loadingSpinner.setVisibility(View.VISIBLE);
+            initializePlayer();
+        } catch (Exception e) {
+            websiteMediaAccepted = false;
+            android.util.Log.e("ISAFLIX", "Medya aktarımı başarısız", e);
+        }
+    }
+
+    private MediaSource createMediaSource(JSONObject entry) {
+        String url = entry.optString("url", "");
+        JSONObject jsonHeaders = entry.optJSONObject("headers");
+
+        Map<String, String> headers = new HashMap<>();
+        String userAgent =
+                "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 Chrome/120 Safari/537.36";
+
+        if (jsonHeaders != null) {
+            Iterator<String> keys = jsonHeaders.keys();
+            while (keys.hasNext()) {
+                String key = keys.next();
+                String value = jsonHeaders.optString(key, "");
+
+                if (!key.matches("(?i)[a-z0-9-]+")
+                        || key.matches("(?i)host|content-length|connection|transfer-encoding|accept-encoding")
