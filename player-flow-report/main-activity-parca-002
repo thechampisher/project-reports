@@ -1,0 +1,120 @@
+                    Intent intent = new Intent(
+                            MainActivity.this,
+                            IsaflixPlayerActivity.class
+                    );
+                    intent.putExtra("stream_url", url);
+                    intent.putExtra(
+                            "channel_name",
+                            name == null ? "İSAFLIX" : name
+                    );
+                    intent.putExtra(
+                            "headers_json",
+                            headersJson == null ? "{}" : headersJson
+                    );
+                    intent.putExtra("queue_file", queueFile.getAbsolutePath());
+                    intent.putExtra("selected_index", targetIndex);
+                    startActivity(intent);
+
+                } catch (Exception e) {
+                    Log.e(TAG, "İSAFLIX kuyruğu aktarılamadı", e);
+                    Toast.makeText(
+                            MainActivity.this,
+                            "İSAFLIX oynatma listesi hazırlanamadı",
+                            Toast.LENGTH_LONG
+                    ).show();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public String getFavorites() {
+            return getSharedPreferences("isa_tv_data", MODE_PRIVATE)
+                    .getString("favorites", "[]");
+        }
+
+        @JavascriptInterface
+        public void setFavorite(String channelJson, boolean favorite) {
+            try {
+                JSONObject channel = new JSONObject(channelJson);
+                String url = channel.optString("url", "");
+                if (url.isEmpty()) return;
+
+                android.content.SharedPreferences prefs =
+                        getSharedPreferences("isa_tv_data", MODE_PRIVATE);
+
+                JSONArray old = new JSONArray(prefs.getString("favorites", "[]"));
+                JSONArray updated = new JSONArray();
+
+                for (int i = 0; i < old.length(); i++) {
+
+                                 new java.io.FileOutputStream(queueFile, false)) {
+                        output.write(queue.toString().getBytes(
+                                java.nio.charset.StandardCharsets.UTF_8
+                        ));
+                        output.flush();
+                    }
+
+                    Intent intent = new Intent(
+                            MainActivity.this,
+                            IsaflixPlayerActivity.class
+                    );
+                    intent.putExtra("stream_url", url);
+                    intent.putExtra(
+                            "channel_name",
+                            name == null ? "İSAFLIX" : name
+                    );
+                    intent.putExtra(
+                            "headers_json",
+                            headersJson == null ? "{}" : headersJson
+                    );
+                    intent.putExtra("queue_file", queueFile.getAbsolutePath());
+                    intent.putExtra("selected_index", targetIndex);
+                    startActivity(intent);
+
+                } catch (Exception e) {
+                    Log.e(TAG, "İSAFLIX kuyruğu aktarılamadı", e);
+                    Toast.makeText(
+                            MainActivity.this,
+                            "İSAFLIX oynatma listesi hazırlanamadı",
+                            Toast.LENGTH_LONG
+                    ).show();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public String getFavorites() {
+            return getSharedPreferences("isa_tv_data", MODE_PRIVATE)
+                    .getString("favorites", "[]");
+        }
+
+        @JavascriptInterface
+        public void setFavorite(String channelJson, boolean favorite) {
+            try {
+                JSONObject channel = new JSONObject(channelJson);
+                String url = channel.optString("url", "");
+                if (url.isEmpty()) return;
+
+                android.content.SharedPreferences prefs =
+                        getSharedPreferences("isa_tv_data", MODE_PRIVATE);
+
+                JSONArray old = new JSONArray(prefs.getString("favorites", "[]"));
+                JSONArray updated = new JSONArray();
+
+                for (int i = 0; i < old.length(); i++) {
+                    JSONObject item = old.optJSONObject(i);
+                    if (item == null) continue;
+                    if (!url.equals(item.optString("url", ""))) {
+                        updated.put(item);
+                    }
+                }
+
+                if (favorite) updated.put(channel);
+
+                prefs.edit().putString("favorites", updated.toString()).apply();
+            } catch (Exception e) {
+
+
+                        result = memberHttp(
+                                "POST", "/member/playback", token, body
+                        );

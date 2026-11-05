@@ -1,0 +1,120 @@
+                                !key.matches("(?i)host|content-length|connection|transfer-encoding|accept-encoding") &&
+                                !value.contains("\r") && !value.contains("\n")) {
+                            channel.headers.put(key, value);
+                        }
+                    }
+                }
+
+                if (channel.url.matches("(?i)^https?://.*")) {
+                    channels.add(channel);
+                }
+            }
+
+        } catch (Exception e) {
+            Log.e(TAG, "Kanal listesi okunamadı", e);
+        }
+
+        if (channels.isEmpty()) {
+            Channel single = new Channel();
+            single.name = getIntent().getStringExtra("channel_name");
+            single.url = getIntent().getStringExtra("stream_url");
+
+            if (single.name == null) single.name = "İSA TV HD";
+
+            String json = getIntent().getStringExtra("headers_json");
+
+            try {
+                JSONObject h = new JSONObject(json == null ? "{}" : json);
+                Iterator<String> keys = h.keys();
+
+                while (keys.hasNext()) {
+                    String key = keys.next();
+                    single.headers.put(key, h.optString(key, ""));
+                }
+            } catch (Exception ignored) {
+            }
+
+            if (single.url != null) channels.add(single);
+        }
+
+            for (int i = 0; i < array.length(); i++) {
+                JSONObject object = array.getJSONObject(i);
+
+                Channel channel = new Channel();
+                channel.name = object.optString("name", "İsimsiz kanal");
+                channel.url = object.optString("url", "");
+                channel.group = object.optString("group", "Genel");
+                channel.logo = object.optString("logo", "");
+                channel.season = object.optInt("season", 0);
+                channel.episode = object.optInt("episode", 0);
+                channel.isLive = object.optBoolean("is_live", true);
+
+                JSONObject h = object.optJSONObject("headers");
+
+                if (h != null) {
+                    Iterator<String> keys = h.keys();
+
+                    while (keys.hasNext()) {
+                        String key = keys.next();
+                        String value = h.optString(key, "");
+
+                        if (!value.isEmpty() &&
+                                key.matches("(?i)[a-z0-9-]+") &&
+                                !key.matches("(?i)host|content-length|connection|transfer-encoding|accept-encoding") &&
+                                !value.contains("\r") && !value.contains("\n")) {
+                            channel.headers.put(key, value);
+                        }
+                    }
+                }
+
+                if (channel.url.matches("(?i)^https?://.*")) {
+                    channels.add(channel);
+                }
+            }
+
+        } catch (Exception e) {
+            Log.e(TAG, "Kanal listesi okunamadı", e);
+        }
+
+        if (channels.isEmpty()) {
+            Channel single = new Channel();
+            single.name = getIntent().getStringExtra("channel_name");
+            single.url = getIntent().getStringExtra("stream_url");
+
+            if (single.name == null) single.name = "İSA TV HD";
+
+            String json = getIntent().getStringExtra("headers_json");
+
+            try {
+                JSONObject h = new JSONObject(json == null ? "{}" : json);
+                Iterator<String> keys = h.keys();
+
+                while (keys.hasNext()) {
+                    String key = keys.next();
+                    single.headers.put(key, h.optString(key, ""));
+                }
+            } catch (Exception ignored) {
+            }
+
+            if (single.url != null) channels.add(single);
+        }
+
+        if (channels.isEmpty()) {
+            finish();
+            return;
+        }
+
+        if (selectedIndex < 0 || selectedIndex >= channels.size()) {
+            selectedIndex = 0;
+        }
+
+        createInterface();
+        initializePlayer();
+        playSelected();
+    }
+
+
+    private void applyImmersiveMode() {
+        View decor = getWindow().getDecorView();
+        decor.setSystemUiVisibility(
+            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY

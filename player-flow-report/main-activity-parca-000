@@ -1,0 +1,120 @@
+MAIN ACTIVITY PLAYER VE URL BAĞLANTILARI
+134:                    startActivityForResult(
+231:    private boolean startBroadcastMiniPlayer(
+659:                        PlayerActivity.class
+662:                intent.putExtra("stream_url", url);
+663:                intent.putExtra(
+667:                intent.putExtra(
+687:    intent.putExtra("queue_file", queueFile.getAbsolutePath());
+688:    intent.putExtra("selected_index", selectedIndex);
+689:    startActivity(intent);
+748:                            IsaflixPlayerActivity.class
+750:                    intent.putExtra("stream_url", url);
+751:                    intent.putExtra(
+755:                    intent.putExtra(
+759:                    intent.putExtra("queue_file", queueFile.getAbsolutePath());
+760:                    intent.putExtra("selected_index", targetIndex);
+761:                    startActivity(intent);
+1020:                                            startBroadcastMiniPlayer(
+1942:                    MainActivity.this.startActivity(browser);
+
+MAIN ACTIVITY İLGİLİ KOD
+                == Configuration.UI_MODE_TYPE_TELEVISION;
+
+        boolean tablet = c.smallestScreenWidthDp >= 600;
+
+        return landscape && (television || tablet);
+    }
+
+
+    private int broadcastMiniWidth() {
+        float density = getResources().getDisplayMetrics().density;
+        int screenWidthDp = (int) (
+                getResources().getDisplayMetrics().widthPixels / density
+        );
+        return dp(Math.max(220, Math.min(300, screenWidthDp - 24)));
+    }
+
+    private int broadcastMiniHeight() {
+        return Math.round(broadcastMiniWidth() * 9f / 16f);
+    }
+
+    private boolean startBroadcastMiniPlayer(
+            String streamUrl, String title, String broadcastId) {
+
+        if (root == null || streamUrl == null ||
+                streamUrl.trim().isEmpty() ||
+                broadcastId == null || broadcastId.trim().isEmpty()) {
+            return false;
+        }
+
+        if (broadcastPlayer != null &&
+                broadcastId.equals(activeBroadcastId)) {
+            return true;
+        }
+
+        stopBroadcastMiniPlayer(null);
+
+        try {
+            FrameLayout box = new FrameLayout(this);
+            box.setBackgroundColor(Color.BLACK);
+            box.setElevation(dp(20));
+
+            PlayerView video = (PlayerView)
+                    android.view.LayoutInflater.from(this).inflate(
+                            R.layout.isa_player_view, box, false
+                    );
+            video.setUseController(false);
+            video.setKeepContentOnPlayerReset(true);
+
+            box.addView(video, new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+            ));
+
+            View tapLayer = new View(this);
+            tapLayer.setBackgroundColor(Color.TRANSPARENT);
+            tapLayer.setClickable(true);
+            tapLayer.setOnClickListener(
+                    v -> setBroadcastFullscreen(true)
+            );
+
+            box.addView(tapLayer, new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+            ));
+
+            ImageView logo = new ImageView(this);
+
+                );
+            }
+        }
+
+        @JavascriptInterface
+        public void play(
+                String name,
+                String url,
+                String headersJson,
+                String queueJson,
+                int selectedIndex) {
+
+            runOnUiThread(() -> {
+                if (url == null ||
+                        !url.matches("(?i)^https?://.*")) {
+                    return;
+                }
+
+                Intent intent = new Intent(
+                        MainActivity.this,
+                        PlayerActivity.class
+                );
+
+                intent.putExtra("stream_url", url);
+                intent.putExtra(
+                        "channel_name",
+                        name == null ? "İSA TV HD" : name
+                );
+                intent.putExtra(
+                        "headers_json",
+                        headersJson == null ? "{}" : headersJson
+                );

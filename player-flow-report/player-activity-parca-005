@@ -1,0 +1,120 @@
+
+    private void createInterface() {
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(Color.BLACK);
+
+        playerView = new PlayerView(this);
+
+        warningBackground.setStroke(dp(1), 0x99FFFFFF);
+
+        portraitWarning.setBackground(warningBackground);
+        portraitWarning.setVisibility(View.GONE);
+        portraitWarning.setElevation(dp(14));
+
+        FrameLayout.LayoutParams warningParams =
+                new FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.WRAP_CONTENT,
+                        Gravity.CENTER
+                );
+
+        warningParams.setMargins(
+                dp(22), dp(18), dp(22), dp(18)
+        );
+
+        root.addView(portraitWarning, warningParams);
+
+        updatePortraitOverlay();
+
+        setContentView(root);
+    }
+
+    
+    private void initializePlayer() {
+        player = createManagedPlayer(false);
+        playerView.setPlayer(player);
+    }
+
+
+    private ExoPlayer createManagedPlayer(boolean preload) {
+        DefaultLoadControl loadControl =
+                new DefaultLoadControl.Builder()
+                        .setBufferDurationsMs(
+                                15000,
+                                60000,
+                                1000,
+                                3000
+                        )
+                        .setPrioritizeTimeOverSizeThresholds(true)
+                        .build();
+
+        ExoPlayer p = new ExoPlayer.Builder(this)
+                .setLoadControl(loadControl)
+                .build();
+
+        p.setVolume(preload ? 0f : 1f);
+
+        p.setTrackSelectionParameters(
+                p.getTrackSelectionParameters()
+                        .buildUpon()
+                        .setMaxVideoBitrate(
+                                preload ? 1500000 : Integer.MAX_VALUE
+                        )
+                        .build()
+        );
+
+        Handler retryHandler = new Handler(Looper.getMainLooper());
+        final int[] retryCount = {0};
+
+        Runnable[] retryTask = new Runnable[1];
+
+        retryTask[0] = () -> {
+            if (p != player || p.isReleased()) return;
+
+            if (retryCount[0] >= 5) {
+                Log.e(TAG, "Canlı yayın yeniden bağlanma denemeleri tükendi.");
+                return;
+            }
+
+            retryCount[0]++;
+            Log.w(TAG, "Yayın yeniden hazırlanıyor. Deneme: "
+                    + retryCount[0]);
+
+            p.prepare();
+            p.play();
+        };
+
+        p.addListener(new Player.Listener() {
+            @Override
+
+                    status.setVisibility(View.GONE);
+                    loadingSpinner.setVisibility(View.VISIBLE);
+
+                    retryHandler.removeCallbacks(retryTask[0]);
+
+                    long delay = Math.min(
+                            1500L * (retryCount[0] + 1),
+                            10000L
+                    );
+
+                    retryHandler.postDelayed(retryTask[0], delay);
+                }
+            }
+        });
+
+        return p;
+    }
+
+    private void prepareChannel(ExoPlayer target, int index,
+                                boolean preload) {
+        if (index < 0 || index >= channels.size()) return;
+
+        Channel channel = channels.get(index);
+
+        try {
+            DefaultHttpDataSource.Factory factory =
+                    new DefaultHttpDataSource.Factory()
+                            .setUserAgent(
+                                    channel.headers.containsKey("User-Agent")
+                                    ? channel.headers.get("User-Agent")
+                                    : "Mozilla/5.0 (Linux; Android 11) "

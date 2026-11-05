@@ -1,0 +1,75 @@
+        groupIndex[0] = (groupIndex[0] + 1) % groups.size();
+        search.setText("");
+        updateList.run();
+    });
+
+    search.addTextChangedListener(new android.text.TextWatcher() {
+        @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
+        @Override public void onTextChanged(CharSequence s, int st, int before, int count) {
+            updateList.run();
+        }
+        @Override public void afterTextChanged(android.text.Editable e) {}
+    });
+
+    list.setAdapter(adapter);
+    list.setOnItemClickListener((parent, view, position, id) -> {
+        if (position < 0 || position >= visibleItems.size()) return;
+        selectedIndex = visibleItems.get(position);
+        dialog.dismiss();
+        playSelected();
+    });
+
+    root.addView(list, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+    TextView close = new TextView(this);
+    close.setText("KAPAT");
+    close.setTextColor(Color.WHITE);
+    close.setGravity(Gravity.CENTER);
+    close.setTextSize(13);
+    close.setBackgroundColor(0xFF303D50);
+    close.setPadding(0, dp(12), 0, dp(12));
+    close.setOnClickListener(v -> dialog.dismiss());
+
+    LinearLayout.LayoutParams closeParams =
+            new LinearLayout.LayoutParams(-1, dp(isPortraitMode() ? 46 : 34));
+    closeParams.topMargin = dp(4);
+    root.addView(close, closeParams);
+
+    updateList.run();
+
+    int selectedPosition = visibleItems.indexOf(selectedIndex);
+    if (selectedPosition >= 0) {
+        list.setSelection(selectedPosition);
+    }
+
+    dialog.setContentView(root);
+    dialog.setCancelable(true);
+    dialog.setOnDismissListener(d -> {
+        if (channelDialog == dialog) channelDialog = null;
+    });
+    dialog.show();
+
+    if (dialog.getWindow() != null) {
+        dialog.getWindow().setBackgroundDrawableResource(
+                android.R.color.transparent);
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        int screenHeight = getResources().getDisplayMetrics().heightPixels;
+        int panelWidth = isPortraitMode()
+                ? (int)(screenWidth * 0.94f)
+                : Math.min(dp(430), (int)(screenWidth * 0.42f));
+
+        dialog.getWindow().setLayout(
+                panelWidth,
+                (int)(screenHeight * 0.96f));
+        dialog.getWindow().setGravity(
+                Gravity.LEFT | Gravity.CENTER_VERTICAL);
+        dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        WindowManager.LayoutParams params = dialog.getWindow().getAttributes();
+        params.dimAmount = 0.72f;
+        dialog.getWindow().setAttributes(params);
+    }
+}
+
+
+
+

@@ -1,0 +1,63 @@
+
+                        if (result.optBoolean("ok", false)) {
+                            String playbackUrl =
+                                    result.optString("playback_url", "");
+
+                            if (playbackUrl.startsWith("/")) {
+                                playbackUrl = MEMBER_API + playbackUrl;
+                            }
+
+                            if (!playbackUrl.isEmpty()) {
+                                final String finalUrl = playbackUrl;
+                                final String finalId = broadcastId;
+                                final JSONObject callbackResult = result;
+
+                                runOnUiThread(() -> {
+                                    boolean started =
+                                            startBroadcastMiniPlayer(
+                                                finalUrl,
+                                                title == null
+                                                    ? "Merkezi yayın"
+                                                    : title,
+                                                finalId
+                                            );
+
+                                    if (started) {
+                                        startBroadcastMonitor(finalId);
+                                    } else {
+                                        try {
+                                            callbackResult.put("ok", false);
+                                            callbackResult.put(
+                                                "error",
+                                                "Mini yayın oynatıcısı başlatılamadı."
+                                            );
+                                        } catch (Exception ignored) {}
+                                    }
+
+                                    memberCallback(
+                                        "__isaBroadcastPlaybackDone",
+                                        callbackId,
+                                        callbackResult
+                                    );
+                                });
+                                return;
+                            }
+
+                            result.put("ok", false);
+                            result.put("error", "Yayın adresi alınamadı.");
+                        }
+                    }
+
+                } catch (Exception e) {
+                    try {
+                        result.put("ok", false);
+                        result.put("error", "Yayın başlatılamadı.");
+                    } catch (Exception ignored) {}
+                }
+
+                memberCallback(
+                    "__isaBroadcastPlaybackDone",
+                    callbackId,
+                    result
+                );
+

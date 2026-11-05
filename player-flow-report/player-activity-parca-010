@@ -1,0 +1,120 @@
+                            .build()
+            );
+
+            androidx.media3.exoplayer.source.MediaSource mediaSource;
+
+            if (isHls) {
+                mediaSource = new HlsMediaSource.Factory(factory)
+                        .setAllowChunklessPreparation(true)
+                        .createMediaSource(item);
+            } else {
+                mediaSource =
+                        new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(
+                                factory
+                        ).createMediaSource(item);
+            }
+
+            target.setMediaSource(mediaSource);
+            target.prepare();
+            target.setPlayWhenReady(!preload);
+
+        } catch (Exception e) {
+            Log.e(TAG, "Kanal hazırlanamadı: " + index, e);
+        }
+    }
+
+    
+
+    private ExoPlayer obtainStandbyPlayer() {
+        if (!standbyPlayers.isEmpty()) {
+            return standbyPlayers.remove(standbyPlayers.size() - 1);
+        }
+
+        return createManagedPlayer(true);
+    }
+
+    private void recyclePlayer(ExoPlayer p) {
+        if (p == null || p == player) return;
+
+        p.setPlayWhenReady(false);
+        p.stop();
+        p.clearMediaItems();
+        p.setVolume(0f);
+
+        if (!standbyPlayers.contains(p) && standbyPlayers.size() < 2) {
+            standbyPlayers.add(p);
+        } else if (!standbyPlayers.contains(p)) {
+            p.release();
+        }
+    }
+
+    private void prepareNeighborChannels() {
+        if (channels.size() < 2 || player == null) return;
+
+        int previous = (selectedIndex - 1 + channels.size())
+                % channels.size();
+
+        int next = (selectedIndex + 1) % channels.size();
+
+        java.util.HashSet<Integer> wanted = new java.util.HashSet<>();
+        wanted.add(previous);
+        wanted.add(next);
+        wanted.remove(selectedIndex);
+
+
+            target.setVolume(preload ? 0f : 1f);
+
+            target.setTrackSelectionParameters(
+                    target.getTrackSelectionParameters()
+                            .buildUpon()
+                            .setMaxVideoBitrate(
+                                    preload ? 1500000 : Integer.MAX_VALUE
+                            )
+                            .build()
+            );
+
+            androidx.media3.exoplayer.source.MediaSource mediaSource;
+
+            if (isHls) {
+                mediaSource = new HlsMediaSource.Factory(factory)
+                        .setAllowChunklessPreparation(true)
+                        .createMediaSource(item);
+            } else {
+                mediaSource =
+                        new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(
+                                factory
+                        ).createMediaSource(item);
+            }
+
+            target.setMediaSource(mediaSource);
+            target.prepare();
+            target.setPlayWhenReady(!preload);
+
+        } catch (Exception e) {
+            Log.e(TAG, "Kanal hazırlanamadı: " + index, e);
+        }
+    }
+
+    
+
+    private ExoPlayer obtainStandbyPlayer() {
+        if (!standbyPlayers.isEmpty()) {
+            return standbyPlayers.remove(standbyPlayers.size() - 1);
+        }
+
+        return createManagedPlayer(true);
+    }
+
+    private void recyclePlayer(ExoPlayer p) {
+        if (p == null || p == player) return;
+
+        p.setPlayWhenReady(false);
+        p.stop();
+        p.clearMediaItems();
+        p.setVolume(0f);
+
+        if (!standbyPlayers.contains(p) && standbyPlayers.size() < 2) {
+            standbyPlayers.add(p);
+        } else if (!standbyPlayers.contains(p)) {
+            p.release();
+        }

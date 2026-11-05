@@ -1,0 +1,120 @@
+
+    } catch (Exception e) {
+        Log.e(TAG, "Favori değiştirilemedi", e);
+    }
+}
+
+private void showChannelList() {
+    if (channels.isEmpty()) return;
+    if (channelDialog != null && channelDialog.isShowing()) return;
+
+    final Dialog dialog = new Dialog(this);
+    channelDialog = dialog;
+
+    final java.util.ArrayList<String> groups = new java.util.ArrayList<>();
+    final java.util.LinkedHashMap<String, java.util.ArrayList<Integer>> grouped =
+            new java.util.LinkedHashMap<>();
+
+    for (int i = 0; i < channels.size(); i++) {
+        Channel c = channels.get(i);
+        String g = c.group == null || c.group.trim().isEmpty()
+                ? "Genel" : c.group.trim();
+
+        if (!grouped.containsKey(g)) {
+            grouped.put(g, new java.util.ArrayList<Integer>());
+            groups.add(g);
+        }
+        grouped.get(g).add(i);
+    }
+
+    final int[] groupIndex = {0};
+
+    if (selectedIndex < 0 || selectedIndex >= channels.size()) return;
+
+    Channel channel = channels.get(selectedIndex);
+    boolean add = !isCurrentChannelFavorite();
+
+    try {
+        JSONObject item = new JSONObject();
+        item.put("name", channel.name == null ? "İsimsiz kanal" : channel.name);
+        item.put("url", channel.url);
+        item.put("group", channel.group == null ? "Genel" : channel.group);
+        item.put("logo", channel.logo == null ? "" : channel.logo);
+        item.put("is_live", channel.isLive);
+        item.put("season", channel.season);
+        item.put("episode", channel.episode);
+
+        android.content.SharedPreferences prefs =
+                getSharedPreferences("isa_tv_data", MODE_PRIVATE);
+
+        JSONArray old = new JSONArray(prefs.getString("favorites", "[]"));
+        JSONArray updated = new JSONArray();
+
+        for (int i = 0; i < old.length(); i++) {
+            JSONObject existing = old.optJSONObject(i);
+            if (existing == null) continue;
+
+            if (!channel.url.equals(existing.optString("url", ""))) {
+                updated.put(existing);
+            }
+        }
+
+        if (add) updated.put(item);
+
+        prefs.edit().putString("favorites", updated.toString()).apply();
+        updatePortraitOverlay();
+
+    } catch (Exception e) {
+        Log.e(TAG, "Favori değiştirilemedi", e);
+    }
+}
+
+private void showChannelList() {
+    if (channels.isEmpty()) return;
+    if (channelDialog != null && channelDialog.isShowing()) return;
+
+    final Dialog dialog = new Dialog(this);
+    channelDialog = dialog;
+
+    final java.util.ArrayList<String> groups = new java.util.ArrayList<>();
+    final java.util.LinkedHashMap<String, java.util.ArrayList<Integer>> grouped =
+            new java.util.LinkedHashMap<>();
+
+    for (int i = 0; i < channels.size(); i++) {
+        Channel c = channels.get(i);
+        String g = c.group == null || c.group.trim().isEmpty()
+                ? "Genel" : c.group.trim();
+
+        if (!grouped.containsKey(g)) {
+            grouped.put(g, new java.util.ArrayList<Integer>());
+            groups.add(g);
+        }
+        grouped.get(g).add(i);
+    }
+
+    final int[] groupIndex = {0};
+
+    // Açık kanalın grubunu başlangıç grubu yap.
+    if (selectedIndex >= 0 && selectedIndex < channels.size()) {
+        String selectedGroup = channels.get(selectedIndex).group;
+        if (selectedGroup == null || selectedGroup.trim().isEmpty()) {
+            selectedGroup = "Genel";
+        } else {
+            selectedGroup = selectedGroup.trim();
+        }
+
+        int foundGroup = groups.indexOf(selectedGroup);
+        if (foundGroup >= 0) groupIndex[0] = foundGroup;
+    }
+
+    final java.util.ArrayList<Integer> visibleItems = new java.util.ArrayList<>();
+
+    LinearLayout root = new LinearLayout(this);
+
+    previous.setOnClickListener(v -> {
+        groupIndex[0] = (groupIndex[0] - 1 + groups.size()) % groups.size();
+        search.setText("");
+        updateList.run();
+    });
+
+    next.setOnClickListener(v -> {

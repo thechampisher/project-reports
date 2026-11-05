@@ -1,0 +1,120 @@
+PLAYER ACTIVITY OYNATMA NOKTALARI
+27:import androidx.media3.common.MediaItem;
+28:import androidx.media3.exoplayer.hls.HlsMediaSource;
+32:import androidx.media3.datasource.DefaultHttpDataSource;
+176:                channel.url = object.optString("url", "");
+196:                            channel.headers.put(key, value);
+201:                if (channel.url.matches("(?i)^https?://.*")) {
+243:        initializePlayer();
+244:        playSelected();
+609:    private void initializePlayer() {
+659:            p.prepare();
+681:                    MediaItem current = p.getCurrentMediaItem();
+727:            DefaultHttpDataSource.Factory factory =
+728:                    new DefaultHttpDataSource.Factory()
+730:                                    channel.headers.containsKey("User-Agent")
+731:                                    ? channel.headers.get("User-Agent")
+738:                            .setDefaultRequestProperties(channel.headers);
+740:            String url = channel.url;
+744:            MediaItem.Builder itemBuilder = new MediaItem.Builder()
+751:                        new MediaItem.LiveConfiguration.Builder()
+759:            MediaItem item = itemBuilder.build();
+762:            target.clearMediaItems();
+778:                mediaSource = new HlsMediaSource.Factory(factory)
+788:            target.setMediaSource(mediaSource);
+789:            target.prepare();
+812:        p.clearMediaItems();
+910:                    playSelected();
+949:    private void playSelected() {
+1150:        item.put("url", channel.url);
+1167:            if (!channel.url.equals(existing.optString("url", ""))) {
+1440:        playSelected();
+
+PLAYER ACTIVITY İLGİLİ KOD
+import android.app.Activity;
+import android.widget.LinearLayout;
+import android.graphics.drawable.GradientDrawable;
+import android.widget.BaseAdapter;
+import android.widget.ListView;
+import android.app.Dialog;
+import android.app.AlertDialog;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.graphics.Color;
+import android.graphics.BitmapFactory;
+import android.content.res.Configuration;
+import android.view.Gravity;
+import android.view.View;
+import android.view.WindowManager;
+import android.widget.FrameLayout;
+import android.widget.TextView;
+import android.widget.ImageView;
+import android.widget.Button;
+import android.widget.EditText;
+import android.net.Uri;
+import android.util.Log;
+
+import androidx.media3.common.MediaItem;
+import androidx.media3.exoplayer.hls.HlsMediaSource;
+import androidx.media3.exoplayer.DefaultLoadControl;
+import androidx.media3.common.PlaybackException;
+import androidx.media3.common.Player;
+import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.ui.PlayerView;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+
+public class PlayerActivity extends Activity {
+
+    private static final String TAG = "ISATVPlayer";
+
+    private static volatile PlayerActivity activeBroadcastPlayer;
+    private String broadcastId;
+
+    public static void stopBroadcast(String id) {
+        PlayerActivity activity = activeBroadcastPlayer;
+        if (activity == null || id == null) return;
+        if (!id.equals(activity.broadcastId)) return;
+        activity.runOnUiThread(activity::finish);
+    }
+
+
+
+    private ExoPlayer player;
+
+    private final Map<Integer, ExoPlayer> preloadedPlayers =
+            new HashMap<>();
+
+    private final ArrayList<ExoPlayer> standbyPlayers =
+            new ArrayList<>();
+    private PlayerView playerView;
+    private TextView status;
+    private Button channelButton;
+    private TextView portraitChannelName;
+    private TextView portraitLiveBadge;
+    private TextView portraitEpisodeInfo;
+    private LinearLayout portraitPanel;
+    private Button favoriteButton;
+private Dialog channelDialog;
+    private ImageView logo;
+    private android.widget.ProgressBar loadingSpinner;
+    private final Runnable hideChannelButton = () -> {
+        if (channelButton != null) channelButton.setVisibility(View.GONE);
+    };
+
+    private final Handler handler =
+            new Handler(Looper.getMainLooper());
+
+import android.widget.ListView;
+import android.app.Dialog;
+import android.app.AlertDialog;
+import android.os.Bundle;
+import android.os.Handler;

@@ -1,0 +1,120 @@
+
+try {
+    java.io.File queueFile = new java.io.File(
+            getCacheDir(),
+            "isa-player-queue.json"
+    );
+
+    try (java.io.FileOutputStream output =
+                 new java.io.FileOutputStream(queueFile, false)) {
+        output.write(
+                (queueJson == null ? "[]" : queueJson)
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8)
+        );
+        output.flush();
+    }
+
+    intent.putExtra("queue_file", queueFile.getAbsolutePath());
+    intent.putExtra("selected_index", selectedIndex);
+    startActivity(intent);
+
+} catch (Exception e) {
+    android.util.Log.e("ISATV", "Kanal kuyruğu aktarılamadı", e);
+}
+
+            });
+        }
+
+
+        // ISAFLIX_QUEUE_V2
+        @JavascriptInterface
+        public void playIsaflix(
+                String name,
+                String url,
+                String headersJson,
+
+                intent.putExtra(
+                        "headers_json",
+                        headersJson == null ? "{}" : headersJson
+                );
+
+try {
+    java.io.File queueFile = new java.io.File(
+            getCacheDir(),
+            "isa-player-queue.json"
+    );
+
+    try (java.io.FileOutputStream output =
+                 new java.io.FileOutputStream(queueFile, false)) {
+        output.write(
+                (queueJson == null ? "[]" : queueJson)
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8)
+        );
+        output.flush();
+    }
+
+    intent.putExtra("queue_file", queueFile.getAbsolutePath());
+    intent.putExtra("selected_index", selectedIndex);
+    startActivity(intent);
+
+} catch (Exception e) {
+    android.util.Log.e("ISATV", "Kanal kuyruğu aktarılamadı", e);
+}
+
+            });
+        }
+
+
+        // ISAFLIX_QUEUE_V2
+        @JavascriptInterface
+        public void playIsaflix(
+                String name,
+                String url,
+                String headersJson,
+                String queueJson,
+                int selectedIndex) {
+
+            runOnUiThread(() -> {
+                int targetIndex = selectedIndex;
+
+                if (url == null ||
+                        !url.matches("(?i)^https?://.*")) {
+                    return;
+                }
+
+                try {
+                    org.json.JSONArray queue = new org.json.JSONArray(
+                            queueJson == null ? "[]" : queueJson
+                    );
+
+                    if (queue.length() == 0) {
+                        org.json.JSONObject one = new org.json.JSONObject();
+                        one.put("name", name == null ? "İSAFLIX" : name);
+                        one.put("url", url);
+                        one.put("headers", new org.json.JSONObject(
+                                headersJson == null ? "{}" : headersJson
+                        ));
+                        one.put("is_live", false);
+                        queue.put(one);
+                        targetIndex = 0;
+                    }
+
+
+                        one.put("is_live", false);
+                        queue.put(one);
+                        targetIndex = 0;
+                    }
+
+                    java.io.File queueFile = new java.io.File(
+                            getCacheDir(),
+                            "isaflix-player-queue.json"
+                    );
+
+                    try (java.io.FileOutputStream output =
+                                 new java.io.FileOutputStream(queueFile, false)) {
+                        output.write(queue.toString().getBytes(
+                                java.nio.charset.StandardCharsets.UTF_8
+                        ));
+                        output.flush();
+                    }
+

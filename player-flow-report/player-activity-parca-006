@@ -1,0 +1,120 @@
+                                    + "AppleWebKit/537.36 Chrome/120 Safari/537.36"
+                            )
+                            .setConnectTimeoutMs(20000)
+                            .setReadTimeoutMs(60000)
+                            .setAllowCrossProtocolRedirects(true)
+                            .setDefaultRequestProperties(channel.headers);
+
+            String url = channel.url;
+            String lowerUrl = url.toLowerCase();
+            boolean isHls = lowerUrl.contains(".m3u8");
+
+            MediaItem.Builder itemBuilder = new MediaItem.Builder()
+                    .setUri(Uri.parse(url))
+                    .setMediaId(channel.name == null
+                            ? url : channel.name);
+
+            if (isHls) {
+                itemBuilder.setLiveConfiguration(
+                        new MediaItem.LiveConfiguration.Builder()
+                                .setTargetOffsetMs(15000)
+                                .setMinPlaybackSpeed(0.97f)
+                                .setMaxPlaybackSpeed(1.03f)
+                                .build()
+                );
+            }
+
+            MediaItem item = itemBuilder.build();
+
+            target.stop();
+            target.clearMediaItems();
+
+            target.setVolume(preload ? 0f : 1f);
+
+            target.setTrackSelectionParameters(
+                    target.getTrackSelectionParameters()
+                            .buildUpon()
+                            .setMaxVideoBitrate(
+                                    preload ? 1500000 : Integer.MAX_VALUE
+                            )
+                            .build()
+            );
+
+            androidx.media3.exoplayer.source.MediaSource mediaSource;
+
+            if (isHls) {
+                mediaSource = new HlsMediaSource.Factory(factory)
+                        .setAllowChunklessPreparation(true)
+                        .createMediaSource(item);
+            } else {
+                mediaSource =
+
+                    loadingSpinner.setVisibility(View.VISIBLE);
+
+                    retryHandler.removeCallbacks(retryTask[0]);
+
+                    long delay = Math.min(
+                            1500L * (retryCount[0] + 1),
+                            10000L
+                    );
+
+                    retryHandler.postDelayed(retryTask[0], delay);
+                }
+            }
+        });
+
+        return p;
+    }
+
+    private void prepareChannel(ExoPlayer target, int index,
+                                boolean preload) {
+        if (index < 0 || index >= channels.size()) return;
+
+        Channel channel = channels.get(index);
+
+        try {
+            DefaultHttpDataSource.Factory factory =
+                    new DefaultHttpDataSource.Factory()
+                            .setUserAgent(
+                                    channel.headers.containsKey("User-Agent")
+                                    ? channel.headers.get("User-Agent")
+                                    : "Mozilla/5.0 (Linux; Android 11) "
+                                    + "AppleWebKit/537.36 Chrome/120 Safari/537.36"
+                            )
+                            .setConnectTimeoutMs(20000)
+                            .setReadTimeoutMs(60000)
+                            .setAllowCrossProtocolRedirects(true)
+                            .setDefaultRequestProperties(channel.headers);
+
+            String url = channel.url;
+            String lowerUrl = url.toLowerCase();
+            boolean isHls = lowerUrl.contains(".m3u8");
+
+            MediaItem.Builder itemBuilder = new MediaItem.Builder()
+                    .setUri(Uri.parse(url))
+                    .setMediaId(channel.name == null
+                            ? url : channel.name);
+
+            if (isHls) {
+                itemBuilder.setLiveConfiguration(
+                        new MediaItem.LiveConfiguration.Builder()
+                                .setTargetOffsetMs(15000)
+                                .setMinPlaybackSpeed(0.97f)
+                                .setMaxPlaybackSpeed(1.03f)
+                                .build()
+                );
+            }
+
+            MediaItem item = itemBuilder.build();
+
+            target.stop();
+            target.clearMediaItems();
+
+            target.setVolume(preload ? 0f : 1f);
+
+            target.setTrackSelectionParameters(
+                    target.getTrackSelectionParameters()
+                            .buildUpon()
+                            .setMaxVideoBitrate(
+                                    preload ? 1500000 : Integer.MAX_VALUE
+                            )

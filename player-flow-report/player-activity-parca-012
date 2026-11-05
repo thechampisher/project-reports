@@ -1,0 +1,120 @@
+                .start();
+
+        if (portraitPanel != null) {
+            portraitPanel.animate()
+                    .translationX(horizontal ? exit : 0f)
+                    .translationY(horizontal ? 0f : exit)
+                    .setDuration(150)
+                    .start();
+        }
+    }
+
+    
+    private void playSelected() {
+        if (player == null || selectedIndex < 0 ||
+                selectedIndex >= channels.size()) return;
+
+        Channel channel = channels.get(selectedIndex);
+
+        updatePortraitOverlay();
+
+        if (loadingSpinner != null) {
+            loadingSpinner.setVisibility(View.VISIBLE);
+        }
+
+        if (status != null) {
+            status.setVisibility(View.GONE);
+        }
+
+        ExoPlayer oldActive = player;
+        ExoPlayer readyPlayer = preloadedPlayers.remove(selectedIndex);
+
+        try {
+            if (readyPlayer != null) {
+                // Hazırlanmış komşu oynatıcıyı aktif hale getir.
+                player = readyPlayer;
+                playerView.setPlayer(player);
+
+                player.setVolume(1f);
+                player.setTrackSelectionParameters(
+                        player.getTrackSelectionParameters()
+                                .buildUpon()
+                                .setMaxVideoBitrate(Integer.MAX_VALUE)
+                                .build()
+                );
+
+                player.setPlayWhenReady(true);
+
+                recyclePlayer(oldActive);
+
+            } else {
+                // Hazır değilse mevcut aktif oynatıcıyla aç.
+                prepareChannel(player, selectedIndex, false);
+            }
+
+            setTitle(channel.name);
+            status.setVisibility(View.GONE);
+
+            // Önceden hazırlanmış oynatıcı READY olmuş olabilir.
+            int activeState = player.getPlaybackState();
+
+            if (activeState == Player.STATE_READY) {
+                loadingSpinner.setVisibility(View.GONE);
+            } else if (activeState == Player.STATE_BUFFERING ||
+                       activeState == Player.STATE_IDLE) {
+                loadingSpinner.setVisibility(View.VISIBLE);
+            }
+
+            applyPreloadPolicy();
+
+            if (channel.season > 0 || channel.episode > 0) {
+                String label = (channel.season > 0 ? "Sezon " + channel.season : "") +
+                        (channel.episode > 0 ? "  ·  " + channel.episode + ". Bölüm" : "");
+                portraitEpisodeInfo.setText(label.trim());
+                portraitEpisodeInfo.setVisibility(View.VISIBLE);
+            } else portraitEpisodeInfo.setVisibility(View.GONE);
+        }
+    }
+
+    favoriteButton.setText(isCurrentChannelFavorite() ? "♥" : "♡");
+    favoriteButton.setContentDescription(
+            isCurrentChannelFavorite()
+                    ? "Favorilerden çıkar"
+                    : "Favorilere ekle");
+}
+
+private void toggleCurrentFavorite() {
+    if (selectedIndex < 0 || selectedIndex >= channels.size()) return;
+
+    Channel channel = channels.get(selectedIndex);
+    boolean add = !isCurrentChannelFavorite();
+
+    try {
+        JSONObject item = new JSONObject();
+        item.put("name", channel.name == null ? "İsimsiz kanal" : channel.name);
+        item.put("url", channel.url);
+        item.put("group", channel.group == null ? "Genel" : channel.group);
+        item.put("logo", channel.logo == null ? "" : channel.logo);
+        item.put("is_live", channel.isLive);
+        item.put("season", channel.season);
+        item.put("episode", channel.episode);
+
+        android.content.SharedPreferences prefs =
+                getSharedPreferences("isa_tv_data", MODE_PRIVATE);
+
+        JSONArray old = new JSONArray(prefs.getString("favorites", "[]"));
+        JSONArray updated = new JSONArray();
+
+        for (int i = 0; i < old.length(); i++) {
+            JSONObject existing = old.optJSONObject(i);
+            if (existing == null) continue;
+
+            if (!channel.url.equals(existing.optString("url", ""))) {
+                updated.put(existing);
+            }
+        }
+
+        if (add) updated.put(item);
+
+        prefs.edit().putString("favorites", updated.toString()).apply();
+        updatePortraitOverlay();
