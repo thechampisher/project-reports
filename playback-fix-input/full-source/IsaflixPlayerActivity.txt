@@ -1,0 +1,1014 @@
+package com.isatvhd.player;
+
+import android.app.Activity;
+import android.os.Bundle;
+import android.graphics.Color;
+import android.graphics.BitmapFactory;
+import android.graphics.drawable.GradientDrawable;
+import android.content.res.Configuration;
+import android.net.Uri;
+import android.view.Gravity;
+import android.view.KeyEvent;
+import android.view.View;
+import android.view.WindowManager;
+import android.widget.Button;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.TextView;
+import android.widget.ProgressBar;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.webkit.WebChromeClient;
+import android.webkit.WebSettings;
+import android.webkit.CookieManager;
+import android.webkit.JavascriptInterface;
+
+
+import androidx.media3.common.C;
+import androidx.media3.common.MediaItem;
+import androidx.media3.common.PlaybackException;
+import androidx.media3.common.Player;
+import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.hls.HlsMediaSource;
+import androidx.media3.exoplayer.dash.DashMediaSource;
+import androidx.media3.exoplayer.source.MediaSource;
+import androidx.media3.exoplayer.source.MergingMediaSource;
+import androidx.media3.exoplayer.source.ConcatenatingMediaSource;
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+import androidx.media3.ui.PlayerView;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+
+public class IsaflixPlayerActivity extends Activity {
+
+    private ExoPlayer player;
+    private PlayerView playerView;
+    private FrameLayout root;
+    private TextView titleView;
+    private TextView episodeView;
+    private TextView status;
+    private Button favoriteButton;
+    private ProgressBar loadingSpinner;
+    private TextView loadingLabel;
+    private boolean resolvingCancelled = false;
+    private WebView webView;
+    private String websitePageUrl = "";
+    private boolean websitePlaybackMode = false;
+    private boolean websiteMediaAccepted = false;
+    private final java.util.LinkedHashSet<String> websiteMediaCandidates =
+            new java.util.LinkedHashSet<>();
+    private final android.os.Handler websiteHandler =
+            new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable websiteResolveRunnable =
+            this::finishWebsiteDetection;
+
+
+    private ImageView logo;
+    private final android.os.Handler infoHandler =
+            new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable hideEpisodeInfo = () -> {
+        if (episodeView != null
+                && getResources().getConfiguration().orientation
+                == Configuration.ORIENTATION_LANDSCAPE) {
+            episodeView.animate().alpha(0f).setDuration(250)
+                    .withEndAction(() -> episodeView.setVisibility(View.GONE))
+                    .start();
+        }
+    };
+
+    private final ArrayList<JSONObject> queue = new ArrayList<>();
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        getWindow().addFlags(
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        );
+        getWindow().setStatusBarColor(Color.BLACK);
+        getWindow().setNavigationBarColor(Color.BLACK);
+        applyImmersiveMode();
+
+        String url = getIntent().getStringExtra("stream_url");
+        if (url == null || !url.matches("(?i)^https?://.*")) {
+            finish();
+            return;
+        }
+
+        loadQueue(url);
+        createInterface();
+        if (isDirectMediaUrl(url)) {
+            initializePlayer();
+        } else {
+            startWebsitePlayback(url);
+        }
+    }
+
+    private void loadQueue(String fallbackUrl) {
+        String path = getIntent().getStringExtra("queue_file");
+        boolean loaded = false;
+
+        if (path != null) {
+            try (java.io.FileInputStream input =
+                         new java.io.FileInputStream(path);
+                 java.io.ByteArrayOutputStream bytes =
+                         new java.io.ByteArrayOutputStream()) {
+
+                byte[] buffer = new byte[8192];
+                int count;
+                while ((count = input.read(buffer)) != -1) {
+                    bytes.write(buffer, 0, count);
+                }
+
+                JSONArray array = new JSONArray(bytes.toString("UTF-8"));
+                for (int i = 0; i < array.length(); i++) {
+                    JSONObject item = array.optJSONObject(i);
+                    if (item == null) continue;
+
+                    String itemUrl = item.optString("url", "");
+                    if (itemUrl.matches("(?i)^https?://.*")) {
+                        queue.add(item);
+                    }
+                }
+                loaded = !queue.isEmpty();
+
+            } catch (Exception e) {
+                android.util.Log.e("ISAFLIX", "Kuyruk okunamadı", e);
+            }
+        }
+
+        if (!loaded) {
+            JSONObject one = new JSONObject();
+            try {
+                one.put("name", getIntent().getStringExtra("channel_name"));
+                one.put("url", fallbackUrl);
+                one.put("headers", new JSONObject(
+                        getIntent().getStringExtra("headers_json") == null
+                                ? "{}"
+                                : getIntent().getStringExtra("headers_json")
+                ));
+                one.put("is_live", false);
+            } catch (Exception ignored) {}
+            queue.add(one);
+        }
+    }
+
+    private void createInterface() {
+        root = new FrameLayout(this);
+        root.setBackgroundColor(Color.BLACK);
+
+        playerView = new PlayerView(this);
+        playerView.setUseController(true);
+        playerView.setControllerAutoShow(true);
+        playerView.setControllerHideOnTouch(true);
+        playerView.setControllerShowTimeoutMs(3000);
+        playerView.setShowBuffering(
+                PlayerView.SHOW_BUFFERING_WHEN_PLAYING
+        );
+
+        root.addView(playerView, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+        ));
+
+        status = new TextView(this);
+        status.setTextColor(Color.WHITE);
+        status.setTextSize(15);
+        status.setGravity(Gravity.CENTER);
+        status.setPadding(dp(18), dp(12), dp(18), dp(12));
+        status.setBackgroundColor(0x99000000);
+        status.setText("Video hazırlanıyor...");
+        root.addView(status, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER
+        ));
+        status.setVisibility(View.GONE);
+
+        loadingSpinner = new ProgressBar(this, null,
+                android.R.attr.progressBarStyleLarge);
+        loadingSpinner.setIndeterminate(true);
+        loadingSpinner.setIndeterminateTintList(
+                android.content.res.ColorStateList.valueOf(Color.RED));
+        root.addView(loadingSpinner, new FrameLayout.LayoutParams(
+                dp(54), dp(54), Gravity.CENTER));
+        loadingLabel = new TextView(this);
+        loadingLabel.setText("Yükleniyor…");
+        loadingLabel.setTextColor(Color.WHITE);
+        loadingLabel.setTextSize(16);
+        loadingLabel.setGravity(Gravity.CENTER);
+        FrameLayout.LayoutParams labelParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
+        labelParams.topMargin = dp(78);
+        root.addView(loadingLabel, labelParams);
+        loadingLabel.setVisibility(View.GONE);
+
+        Button back = new Button(this);
+        back.setText("‹");
+        back.setTextSize(30);
+        back.setTextColor(Color.WHITE);
+        back.setAllCaps(false);
+        back.setPadding(0, 0, 0, dp(5));
+
+        GradientDrawable backBackground = new GradientDrawable();
+        backBackground.setColor(0xAA101010);
+        backBackground.setCornerRadius(dp(28));
+        back.setBackground(backBackground);
+        back.setOnClickListener(v -> finish());
+
+        FrameLayout.LayoutParams backParams =
+                new FrameLayout.LayoutParams(dp(48), dp(48),
+                        Gravity.TOP | Gravity.LEFT);
+        backParams.setMargins(dp(14), dp(14), 0, 0);
+        root.addView(back, backParams);
+
+        FrameLayout info = new FrameLayout(this);
+        info.setBackgroundColor(0x99000000);
+        info.setPadding(dp(14), dp(10), dp(14), dp(10));
+
+        titleView = new TextView(this);
+        titleView.setTextColor(Color.WHITE);
+        titleView.setTextSize(17);
+        titleView.setMaxLines(2);
+        titleView.setTypeface(null, android.graphics.Typeface.BOLD);
+        info.addView(titleView, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP | Gravity.LEFT
+        ));
+
+        episodeView = new TextView(this);
+        episodeView.setTextColor(0xFFE5E5E5);
+        episodeView.setTextSize(13);
+
+        FrameLayout.LayoutParams episodeParams =
+                new FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.WRAP_CONTENT,
+                        Gravity.TOP | Gravity.LEFT
+                );
+        episodeParams.topMargin = dp(48);
+        info.addView(episodeView, episodeParams);
+
+        FrameLayout.LayoutParams infoParams =
+                new FrameLayout.LayoutParams(
+                        Math.min(
+                                getResources().getDisplayMetrics().widthPixels - dp(28),
+                                dp(430)
+                        ),
+                        dp(105),
+                        Gravity.BOTTOM | Gravity.LEFT
+                );
+        infoParams.setMargins(dp(14), 0, dp(14), dp(22));
+        root.addView(info, infoParams);
+
+        createTvLogo();
+
+        favoriteButton = new Button(this);
+        favoriteButton.setText("♡");
+        favoriteButton.setTextSize(23);
+        favoriteButton.setTextColor(Color.WHITE);
+        favoriteButton.setAllCaps(false);
+        favoriteButton.setPadding(0, 0, 0, dp(3));
+        GradientDrawable favoriteBackground = new GradientDrawable();
+        favoriteBackground.setColor(0xCC171717);
+        favoriteBackground.setCornerRadius(dp(26));
+        favoriteButton.setBackground(favoriteBackground);
+        favoriteButton.setContentDescription("İSAFLIX favorilere ekle");
+        favoriteButton.setOnClickListener(v -> toggleCurrentFavorite());
+
+        Configuration config = getResources().getConfiguration();
+        boolean wideDevice = config.orientation == Configuration.ORIENTATION_LANDSCAPE
+                && (config.smallestScreenWidthDp >= 600
+                || (config.uiMode & Configuration.UI_MODE_TYPE_MASK)
+                == Configuration.UI_MODE_TYPE_TELEVISION);
+        FrameLayout.LayoutParams favoriteParams =
+                new FrameLayout.LayoutParams(dp(48), dp(48),
+                        Gravity.TOP | Gravity.RIGHT);
+        favoriteParams.setMargins(0, wideDevice ? dp(112) : dp(14), dp(14), 0);
+        root.addView(favoriteButton, favoriteParams);
+
+        setContentView(root);
+        updateTitle();
+    }
+
+
+    private boolean isDirectMediaUrl(String value) {
+        if (value == null) return false;
+        String lower = value.toLowerCase(java.util.Locale.ROOT);
+        try {
+            String path = Uri.parse(value).getPath();
+            if (path != null && path.matches(
+                    "(?i).*\\.(m3u8|mpd|mp4|m4v|webm|mkv|mov|3gp)$")) {
+                return true;
+            }
+        } catch (Exception ignored) {}
+        return lower.contains("format=m3u8")
+                || lower.contains("type=hls")
+                || lower.contains("format=mpd")
+                || lower.contains("type=dash");
+    }
+
+
+    private void startWebsitePlayback(String pageUrl) {
+        websitePlaybackMode = true;
+        websiteMediaAccepted = false;
+        resolvingCancelled = false;
+        websitePageUrl = pageUrl;
+        websiteMediaCandidates.clear();
+        websiteHandler.removeCallbacksAndMessages(null);
+
+        int selected = getIntent().getIntExtra("selected_index", 0);
+        if (selected < 0 || selected >= queue.size()) selected = 0;
+        JSONObject chosen = queue.isEmpty() ? new JSONObject() : queue.get(selected);
+        queue.clear();
+        queue.add(chosen);
+
+        playerView.setVisibility(View.GONE);
+        loadingSpinner.setVisibility(View.VISIBLE);
+        loadingLabel.setVisibility(View.VISIBLE);
+        status.setVisibility(View.GONE);
+
+        webView = new WebView(this);
+        webView.setVisibility(View.INVISIBLE);
+        webView.setBackgroundColor(Color.BLACK);
+        webView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setDatabaseEnabled(true);
+        settings.setMediaPlaybackRequiresUserGesture(false);
+        settings.setSupportMultipleWindows(false);
+        settings.setJavaScriptCanOpenWindowsAutomatically(false);
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(false);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+
+        CookieManager cookies = CookieManager.getInstance();
+        cookies.setAcceptCookie(true);
+        cookies.setAcceptThirdPartyCookies(webView, true);
+        webView.addJavascriptInterface(new WebsiteBridge(), "ISAWebsiteBridge");
+
+        final String initialHost;
+        try {
+            initialHost = Uri.parse(pageUrl).getHost();
+            if (initialHost == null) throw new IllegalArgumentException("Host yok");
+        } catch (Exception e) {
+            status.setText("İçerik adresi okunamadı.");
+            status.setVisibility(View.VISIBLE);
+            return;
+        }
+
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onCreateWindow(WebView view, boolean dialog,
+                    boolean userGesture, android.os.Message resultMsg) {
+                return false;
+            }
+        });
+
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                try {
+                    Uri target = Uri.parse(url);
+                    String scheme = target.getScheme();
+                    if (!"http".equalsIgnoreCase(scheme)
+                            && !"https".equalsIgnoreCase(scheme)) return true;
+                    String host = target.getHost();
+                    return host == null || !host.equalsIgnoreCase(initialHost);
+                } catch (Exception e) {
+                    return true;
+                }
+            }
+
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view,
+                    android.webkit.WebResourceRequest request) {
+                if (request == null || request.getUrl() == null) return true;
+
+                // Video oynatıcı iframe'leri farklı alan adlarında olabilir.
+                // Alt çerçevelerin yüklenmesine izin ver; ana sayfa dışına
+                // yapılan reklam/yönlendirme geçişlerini engelle.
+                if (!request.isForMainFrame()) return false;
+
+                String targetHost = request.getUrl().getHost();
+                String scheme = request.getUrl().getScheme();
+
+                if (!"http".equalsIgnoreCase(scheme)
+                        && !"https".equalsIgnoreCase(scheme)) return true;
+
+                return targetHost == null
+                        || !targetHost.equalsIgnoreCase(initialHost);
+            }
+
+            @Override
+            public android.webkit.WebResourceResponse shouldInterceptRequest(
+                    WebView view, android.webkit.WebResourceRequest request) {
+                if (request != null && request.getUrl() != null)
+                    collectWebsiteMedia(request.getUrl().toString());
+                return super.shouldInterceptRequest(view, request);
+            }
+
+            @Override
+            public android.webkit.WebResourceResponse shouldInterceptRequest(
+                    WebView view, String url) {
+                collectWebsiteMedia(url);
+                return super.shouldInterceptRequest(view, url);
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                installWebsiteDetector();
+            }
+        });
+
+        root.addView(webView, 0, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+        webView.loadUrl(pageUrl);
+
+        websiteHandler.postDelayed(() -> {
+            if (websitePlaybackMode && !websiteMediaAccepted) {
+                loadingSpinner.setVisibility(View.GONE);
+                loadingLabel.setVisibility(View.GONE);
+                status.setText("Video kaynağı bulunamadı. Site medya adresi sağlamadı.");
+                status.setVisibility(View.VISIBLE);
+            }
+        }, 30000L);
+    }
+
+
+    private boolean isAudioOnlyUrl(String url) {
+        if (url == null) return false;
+        String u = url.toLowerCase(java.util.Locale.ROOT);
+        return u.contains("/mp4a/") || u.contains("/audio/")
+                || u.matches("(?s).*\\.(aac|mp3|m4a|opus)(?:[?#].*)?$");
+    }
+
+    private void collectWebsiteMedia(String url) {
+        if (resolvingCancelled || websiteMediaAccepted || !websitePlaybackMode) return;
+        if (url == null || !url.matches("(?i)^https?://.*")) return;
+        if (!isDirectMediaUrl(url)) return;
+
+        synchronized (websiteMediaCandidates) {
+            websiteMediaCandidates.add(url);
+        }
+        android.util.Log.d("ISAFLIX", "Medya bulundu: " + url);
+        websiteHandler.removeCallbacks(websiteResolveRunnable);
+        websiteHandler.postDelayed(websiteResolveRunnable, 6000L);
+    }
+
+    private void installWebsiteDetector() {
+        if (webView == null) return;
+        String script =
+            "(function(){" +
+            "if(window.__isaDetectorInstalled)return;" +
+            "window.__isaDetectorInstalled=true;" +
+            "function send(u){try{if(u&&/^https?:\\/\\//i.test(u))" +
+            "ISAWebsiteBridge.onResource(u);}catch(e){}}" +
+            "function scanDoc(d,depth){try{" +
+            "if(!d||depth>4)return;" +
+            "var a=d.querySelectorAll('video,audio,source');" +
+            "for(var i=0;i<a.length;i++){var x=a[i];" +
+            "send(x.currentSrc||x.src||x.getAttribute('src'));" +
+            "send(x.getAttribute('data-src'));" +
+            "send(x.getAttribute('data-url'));}" +
+            "var f=d.querySelectorAll('iframe,frame');" +
+            "for(var k=0;k<f.length;k++){" +
+            "var z=f[k];send(z.src||z.getAttribute('src'));" +
+            "send(z.getAttribute('data-src'));" +
+            "try{if(z.contentDocument)scanDoc(z.contentDocument,depth+1);}catch(e){}}" +
+            "var r=d.defaultView.performance.getEntriesByType('resource');" +
+            "for(var j=0;j<r.length;j++)send(r[j].name);" +
+            "}catch(e){}}" +
+            "function scan(){scanDoc(document,0);}" +
+            "document.addEventListener('loadedmetadata',scan,true);" +
+            "document.addEventListener('canplay',scan,true);" +
+            "document.addEventListener('load',scan,true);" +
+            "try{new MutationObserver(scan).observe(document.documentElement||document," +
+            "{childList:true,subtree:true,attributes:true," +
+            "attributeFilter:['src','data-src','data-url']});}catch(e){}" +
+            "setInterval(scan,500);scan();})();";
+        webView.evaluateJavascript(script, null);
+    }
+
+    private class WebsiteBridge {
+        @JavascriptInterface
+        public void onResource(String url) {
+            collectWebsiteMedia(url);
+        }
+    }
+
+    private void finishWebsiteDetection() {
+        if (resolvingCancelled || websiteMediaAccepted || !websitePlaybackMode) return;
+
+        String video = null;
+        String audio = null;
+        synchronized (websiteMediaCandidates) {
+            for (String url : websiteMediaCandidates) {
+                String u = url.toLowerCase(java.util.Locale.ROOT);
+                if (u.contains("/mp4a/")) audio = url;
+                else if (u.contains("/avc1/")) video = url;
+            }
+            if (video == null) {
+                for (String url : websiteMediaCandidates) {
+                    if (!isAudioOnlyUrl(url)) {
+                        video = url;
+                        break;
+                    }
+                }
+            }
+        }
+        if (video != null) acceptWebsiteMedia(video, audio);
+    }
+
+    private void acceptWebsiteMedia(String mediaUrl, String audioUrl) {
+        if (resolvingCancelled || websiteMediaAccepted || !websitePlaybackMode) return;
+        if (mediaUrl == null || !isDirectMediaUrl(mediaUrl)) return;
+
+        websiteMediaAccepted = true;
+        try {
+            JSONObject item = queue.get(0);
+            item.put("url", mediaUrl);
+            if (audioUrl != null) item.put("audio_url", audioUrl);
+
+            JSONObject headers = item.optJSONObject("headers");
+            if (headers == null) headers = new JSONObject();
+            headers.put("Referer", websitePageUrl);
+            String cookie = CookieManager.getInstance().getCookie(websitePageUrl);
+            if (cookie != null && !cookie.isEmpty()) headers.put("Cookie", cookie);
+            item.put("headers", headers);
+
+            websiteHandler.removeCallbacksAndMessages(null);
+            if (webView != null) {
+                webView.stopLoading();
+                webView.loadUrl("about:blank");
+                root.removeView(webView);
+                webView.destroy();
+                webView = null;
+            }
+            websitePlaybackMode = false;
+            loadingLabel.setVisibility(View.GONE);
+            playerView.setVisibility(View.VISIBLE);
+            loadingSpinner.setVisibility(View.VISIBLE);
+            initializePlayer();
+        } catch (Exception e) {
+            websiteMediaAccepted = false;
+            android.util.Log.e("ISAFLIX", "Medya aktarımı başarısız", e);
+        }
+    }
+
+    private MediaSource createMediaSource(JSONObject entry) {
+        String url = entry.optString("url", "");
+        JSONObject jsonHeaders = entry.optJSONObject("headers");
+
+        Map<String, String> headers = new HashMap<>();
+        String userAgent =
+                "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 Chrome/120 Safari/537.36";
+
+        if (jsonHeaders != null) {
+            Iterator<String> keys = jsonHeaders.keys();
+            while (keys.hasNext()) {
+                String key = keys.next();
+                String value = jsonHeaders.optString(key, "");
+
+                if (!key.matches("(?i)[a-z0-9-]+")
+                        || key.matches("(?i)host|content-length|connection|transfer-encoding|accept-encoding")
+                        || value.isEmpty()
+                        || value.contains("\r")
+                        || value.contains("\n")) {
+                    continue;
+                }
+
+                if (key.equalsIgnoreCase("User-Agent")) {
+                    userAgent = value;
+                } else {
+                    headers.put(key, value);
+                }
+            }
+        }
+
+        DefaultHttpDataSource.Factory factory =
+                new DefaultHttpDataSource.Factory()
+                        .setUserAgent(userAgent)
+                        .setConnectTimeoutMs(20000)
+                        .setReadTimeoutMs(60000)
+                        .setAllowCrossProtocolRedirects(true)
+                        .setDefaultRequestProperties(headers);
+
+        MediaItem mediaItem = new MediaItem.Builder()
+                .setUri(Uri.parse(url))
+                .setMediaId(entry.optString("name", url))
+                .build();
+
+        String path = Uri.parse(url).getPath();
+        path = path == null ? "" : path.toLowerCase();
+        String lowerUrl = url.toLowerCase(java.util.Locale.ROOT);
+        boolean isHls = path.endsWith(".m3u8")
+                || lowerUrl.matches("(?s).*\\.m3u8(?:[?#].*)?$")
+                || lowerUrl.contains("format=m3u8")
+                || lowerUrl.contains("type=hls");
+        boolean isDash = path.endsWith(".mpd")
+                || lowerUrl.matches("(?s).*\\.mpd(?:[?#].*)?$")
+                || lowerUrl.contains("format=mpd")
+                || lowerUrl.contains("type=dash");
+
+        if (isHls) {
+            return new HlsMediaSource.Factory(factory)
+                    .setAllowChunklessPreparation(true)
+                    .createMediaSource(mediaItem);
+        }
+
+        if (isDash) {
+            return new DashMediaSource.Factory(factory)
+                    .createMediaSource(mediaItem);
+        }
+
+        return new DefaultMediaSourceFactory(factory)
+                .createMediaSource(mediaItem);
+    }
+
+    private void initializePlayer() {
+        try {
+            ArrayList<MediaSource> sources = new ArrayList<>();
+
+            for (JSONObject item : queue) {
+                MediaSource videoSource = createMediaSource(item);
+                String audioUrl = item.optString("audio_url", "");
+                if (!audioUrl.isEmpty()) {
+                    JSONObject audioItem = new JSONObject(item.toString());
+                    audioItem.put("url", audioUrl);
+                    audioItem.remove("audio_url");
+                    MediaSource audioSource = createMediaSource(audioItem);
+                    sources.add(new MergingMediaSource(true, videoSource, audioSource));
+                } else {
+                    sources.add(videoSource);
+                }
+            }
+
+            if (sources.isEmpty()) {
+                throw new IllegalStateException("Oynatma listesi boş.");
+            }
+
+            int index = getIntent().getIntExtra("selected_index", 0);
+            if (index < 0 || index >= sources.size()) index = 0;
+
+            player = new ExoPlayer.Builder(this).build();
+            playerView.setPlayer(player);
+
+            player.addListener(new Player.Listener() {
+                @Override
+                public void onPlaybackStateChanged(int state) {
+                    if (state == Player.STATE_READY) {
+                        loadingSpinner.setVisibility(View.GONE);
+                        status.setVisibility(View.GONE);
+                        playerView.showController();
+                    } else if (state == Player.STATE_BUFFERING) {
+                        status.setVisibility(View.GONE);
+                        loadingSpinner.setVisibility(View.VISIBLE);
+                    } else if (state == Player.STATE_ENDED) {
+                        loadingSpinner.setVisibility(View.GONE);
+                        status.setVisibility(View.GONE);
+                    }
+                }
+
+                @Override
+                public void onMediaItemTransition(
+                        MediaItem mediaItem, int reason) {
+                    updateTitle();
+                    updateFavoriteButton();
+                }
+
+                @Override
+                public void onPlayerError(PlaybackException error) {
+                    loadingSpinner.setVisibility(View.GONE);
+                    status.setText("İçerik şu anda oynatılamıyor.");
+                    status.setVisibility(View.VISIBLE);
+                    android.util.Log.e(
+                            "ISAFLIX", "Oynatma hatası", error
+                    );
+                }
+            });
+
+            MediaSource[] array = sources.toArray(new MediaSource[0]);
+            ConcatenatingMediaSource playlist =
+                    new ConcatenatingMediaSource(array);
+
+            player.setMediaSource(playlist);
+            player.seekTo(index, 0L);
+            player.prepare();
+            player.play();
+            updateTitle();
+            updateFavoriteButton();
+
+        } catch (Exception e) {
+            android.util.Log.e("ISAFLIX", "Oynatıcı başlatılamadı", e);
+            if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
+            status.setText("İçerik şu anda oynatılamıyor.");
+            status.setVisibility(View.VISIBLE);
+        }
+    }
+
+
+    private void updateTitle() {
+        if (player == null || queue.isEmpty()) return;
+
+        int index = player.getCurrentMediaItemIndex();
+        if (index < 0 || index >= queue.size()) index = 0;
+
+        JSONObject item = queue.get(index);
+        String name = item.optString(
+                "name",
+                getIntent().getStringExtra("channel_name")
+        );
+
+        titleView.setText(name == null ? "İSAFLIX" : name);
+
+        int season = item.optInt("season", 0);
+        int episode = item.optInt("episode", 0);
+
+        infoHandler.removeCallbacks(hideEpisodeInfo);
+
+        if (season > 0 || episode > 0) {
+            episodeView.animate().cancel();
+            episodeView.setAlpha(1f);
+
+            String episodeInfo;
+            if (season > 0 && episode > 0) {
+                episodeInfo = "Sezon " + season + "  ·  " + episode + ". Bölüm";
+            } else if (season > 0) {
+                episodeInfo = "Sezon " + season;
+            } else {
+                episodeInfo = episode + ". Bölüm";
+            }
+
+            episodeView.setText(episodeInfo);
+
+            boolean landscape =
+                    getResources().getConfiguration().orientation
+                    == Configuration.ORIENTATION_LANDSCAPE;
+
+            episodeView.setVisibility(View.VISIBLE);
+
+            if (landscape) {
+                infoHandler.postDelayed(hideEpisodeInfo, 5000L);
+            }
+        } else {
+            episodeView.setVisibility(View.GONE);
+        }
+    }
+
+    private String currentFavoriteId(JSONObject item) {
+        boolean series = item.optBoolean("is_series", false)
+                || "series".equalsIgnoreCase(item.optString("type", ""))
+                || item.optInt("season", 0) > 0;
+
+        String parentId = item.optString("series_id",
+                item.optString("parent_id", ""));
+        if (series) {
+            String parentName = item.optString("series_name",
+                    item.optString("name", "İSAFLIX dizisi"));
+            return "series:" + (parentId.isEmpty() ? parentName : parentId);
+        }
+
+        String id = item.optString("id", "");
+        return "movie:" + (id.isEmpty()
+                ? item.optString("url", "") : id);
+    }
+
+    private void updateFavoriteButton() {
+        if (favoriteButton == null || queue.isEmpty()) return;
+
+        int index = player == null ? 0 : player.getCurrentMediaItemIndex();
+        if (index < 0 || index >= queue.size()) index = 0;
+
+        JSONObject item = queue.get(index);
+        String favoriteId = currentFavoriteId(item);
+        android.content.SharedPreferences prefs =
+                getSharedPreferences("isa_tv_data", MODE_PRIVATE);
+
+        boolean saved = false;
+        try {
+            JSONArray favorites = new JSONArray(
+                    prefs.getString("isaflix_favorites", "[]"));
+            for (int i = 0; i < favorites.length(); i++) {
+                JSONObject favorite = favorites.optJSONObject(i);
+                if (favorite != null
+                        && favoriteId.equals(favorite.optString("favorite_id", ""))) {
+                    saved = true;
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            android.util.Log.e("ISAFLIX", "Favoriler okunamadı", e);
+        }
+
+        favoriteButton.setText(saved ? "♥" : "♡");
+        favoriteButton.setTextColor(saved ? 0xFFFF3B55 : Color.WHITE);
+        favoriteButton.setContentDescription(
+                saved ? "Favorilerden çıkar" : "Favorilere ekle");
+    }
+
+    private void toggleCurrentFavorite() {
+        if (queue.isEmpty()) return;
+
+        int index = player == null ? 0 : player.getCurrentMediaItemIndex();
+        if (index < 0 || index >= queue.size()) index = 0;
+
+        JSONObject item = queue.get(index);
+        String favoriteId = currentFavoriteId(item);
+        boolean series = favoriteId.startsWith("series:");
+
+        android.content.SharedPreferences prefs =
+                getSharedPreferences("isa_tv_data", MODE_PRIVATE);
+
+        try {
+            JSONArray old = new JSONArray(
+                    prefs.getString("isaflix_favorites", "[]"));
+            JSONArray updated = new JSONArray();
+            boolean existed = false;
+
+            for (int i = 0; i < old.length(); i++) {
+                JSONObject favorite = old.optJSONObject(i);
+                if (favorite == null) continue;
+
+                if (favoriteId.equals(favorite.optString("favorite_id", ""))) {
+                    existed = true;
+                } else {
+                    updated.put(favorite);
+                }
+            }
+
+            if (!existed) {
+                JSONObject record = new JSONObject();
+                record.put("favorite_id", favoriteId);
+                record.put("name", series
+                        ? item.optString("series_name",
+                            item.optString("name", "İSAFLIX dizisi"))
+                        : item.optString("name", "İSAFLIX filmi"));
+                record.put("url", series
+                        ? item.optString("series_url",
+                            item.optString("url", ""))
+                        : item.optString("url", ""));
+                record.put("logo", item.optString("logo",
+                        item.optString("poster", "")));
+                record.put("type", series ? "series" : "movie");
+                record.put("is_series", series);
+                if (series) {
+                    record.put("series_id",
+                            item.optString("series_id",
+                                item.optString("parent_id", "")));
+                }
+                updated.put(record);
+            }
+
+            prefs.edit().putString("isaflix_favorites",
+                    updated.toString()).apply();
+            updateFavoriteButton();
+
+        } catch (Exception e) {
+            android.util.Log.e("ISAFLIX", "Favori kaydedilemedi", e);
+        }
+    }
+
+    private void createTvLogo() {
+        Configuration c = getResources().getConfiguration();
+
+        boolean landscape =
+                c.orientation == Configuration.ORIENTATION_LANDSCAPE;
+        boolean television =
+                (c.uiMode & Configuration.UI_MODE_TYPE_MASK)
+                        == Configuration.UI_MODE_TYPE_TELEVISION;
+        boolean tablet = c.smallestScreenWidthDp >= 600;
+
+        if (!landscape || (!television && !tablet)) return;
+
+        try {
+            logo = new ImageView(this);
+
+            try (java.io.InputStream input =
+                         getAssets().open("isa-tv-hd/assets/logo.png")) {
+                logo.setImageBitmap(BitmapFactory.decodeStream(input));
+            }
+
+            logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            logo.setPadding(dp(5), dp(5), dp(5), dp(5));
+            logo.setBackgroundColor(0x880F0F0F);
+            logo.setContentDescription("İSA TV HD");
+
+            FrameLayout.LayoutParams params =
+                    new FrameLayout.LayoutParams(
+                            dp(145),
+                            dp(90),
+                            Gravity.TOP | Gravity.RIGHT
+                    );
+            params.setMargins(0, dp(16), dp(22), 0);
+            root.addView(logo, params);
+
+        } catch (Exception e) {
+            android.util.Log.e("ISAFLIX", "Logo yüklenemedi", e);
+        }
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (event.getAction() == KeyEvent.ACTION_DOWN
+                && event.getRepeatCount() == 0
+                && player != null) {
+
+            int key = event.getKeyCode();
+
+            if (key == KeyEvent.KEYCODE_DPAD_UP
+                    || key == KeyEvent.KEYCODE_CHANNEL_UP
+                    || key == KeyEvent.KEYCODE_PAGE_UP) {
+                if (player.hasNextMediaItem()) {
+                    player.seekToNextMediaItem();
+                }
+                return true;
+            }
+
+            if (key == KeyEvent.KEYCODE_DPAD_DOWN
+                    || key == KeyEvent.KEYCODE_CHANNEL_DOWN
+                    || key == KeyEvent.KEYCODE_PAGE_DOWN) {
+                if (player.hasPreviousMediaItem()) {
+                    player.seekToPreviousMediaItem();
+                }
+                return true;
+            }
+        }
+
+        return super.dispatchKeyEvent(event);
+    }
+
+    private int dp(float value) {
+        return (int)(
+                value * getResources().getDisplayMetrics().density + 0.5f
+        );
+    }
+
+    private void applyImmersiveMode() {
+        getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                | View.SYSTEM_UI_FLAG_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        );
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) applyImmersiveMode();
+    }
+
+    @Override
+    public void onBackPressed() {
+        resolvingCancelled = true;
+        websitePlaybackMode = false;
+        websiteMediaAccepted = true;
+        if (webView != null) {
+            webView.stopLoading();
+            webView.onPause();
+        }
+        finish();
+    }
+
+    @Override
+    protected void onPause() {
+        if (player != null) player.pause();
+        if (webView != null) webView.onPause();
+        super.onPause();
+    }
+
+    @Override
+    protected void onDestroy() {
+        infoHandler.removeCallbacksAndMessages(null);
+        websiteHandler.removeCallbacksAndMessages(null);
+        if (playerView != null) playerView.setPlayer(null);
+        if (player != null) {
+            player.release();
+            player = null;
+        }
+        resolvingCancelled = true;
+        websitePlaybackMode = false;
+        if (webView != null) {
+            webView.stopLoading();
+            webView.destroy();
+            webView = null;
+        }
+        super.onDestroy();
+    }
+}
