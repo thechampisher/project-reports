@@ -1,0 +1,180 @@
+========== /data/data/com.termux/files/home/app-work/app/src/main/java/com/isatvhd/player/IsaflixPlayerActivity.java ==========
+19:import android.webkit.WebView;
+20:import android.webkit.WebViewClient;
+28:import androidx.media3.common.MediaItem;
+31:import androidx.media3.datasource.DefaultHttpDataSource;
+33:import androidx.media3.exoplayer.hls.HlsMediaSource;
+34:import androidx.media3.exoplayer.dash.DashMediaSource;
+61:    private WebView webView;
+99:        String url = getIntent().getStringExtra("stream_url");
+340:        webView = new WebView(this);
+373:            public boolean onCreateWindow(WebView view, boolean dialog,
+379:        webView.setWebViewClient(new WebViewClient() {
+381:            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+395:            public boolean shouldOverrideUrlLoading(WebView view,
+416:                    WebView view, android.webkit.WebResourceRequest request) {
+424:                    WebView view, String url) {
+430:            public void onPageFinished(WebView view, String url) {
+602:        DefaultHttpDataSource.Factory factory =
+603:                new DefaultHttpDataSource.Factory()
+610:        MediaItem mediaItem = new MediaItem.Builder()
+628:            return new HlsMediaSource.Factory(factory)
+634:            return new DashMediaSource.Factory(factory)
+687:                public void onMediaItemTransition(
+688:                        MediaItem mediaItem, int reason) {
+708:            player.setMediaSource(playlist);
+727:        int index = player.getCurrentMediaItemIndex();
+793:        int index = player == null ? 0 : player.getCurrentMediaItemIndex();
+826:        int index = player == null ? 0 : player.getCurrentMediaItemIndex();
+935:                if (player.hasNextMediaItem()) {
+936:                    player.seekToNextMediaItem();
+944:                if (player.hasPreviousMediaItem()) {
+945:                    player.seekToPreviousMediaItem();
+1002:            player.release();
+========== /data/data/com.termux/files/home/app-work/app/src/main/java/com/isatvhd/player/PlayerActivity.java ==========
+27:import androidx.media3.common.MediaItem;
+28:import androidx.media3.exoplayer.hls.HlsMediaSource;
+32:import androidx.media3.datasource.DefaultHttpDataSource;
+213:            single.url = getIntent().getStringExtra("stream_url");
+681:                    MediaItem current = p.getCurrentMediaItem();
+720:    private void prepareChannel(ExoPlayer target, int index,
+727:            DefaultHttpDataSource.Factory factory =
+728:                    new DefaultHttpDataSource.Factory()
+744:            MediaItem.Builder itemBuilder = new MediaItem.Builder()
+751:                        new MediaItem.LiveConfiguration.Builder()
+759:            MediaItem item = itemBuilder.build();
+762:            target.clearMediaItems();
+778:                mediaSource = new HlsMediaSource.Factory(factory)
+788:            target.setMediaSource(mediaSource);
+812:        p.clearMediaItems();
+818:            p.release();
+853:                prepareChannel(standby, index, true);
+988:                prepareChannel(player, selectedIndex, false);
+1317:            TextView subtitle;
+1324:                subtitle = (TextView) texts.getChildAt(1);
+1348:                subtitle = new TextView(PlayerActivity.this);
+1349:                subtitle.setTextColor(0xFFAAAAAA);
+1350:                subtitle.setTextSize(isPortraitMode() ? 11 : 9);
+1353:                texts.addView(subtitle);
+1363:            subtitle.setText(actual == selectedIndex ? "ŞU ANDA OYNUYOR" : "CANLI YAYIN");
+1612:                p.release();
+========== /data/data/com.termux/files/home/app-work/app/src/main/java/com/isatvhd/player/MainActivity.java ==========
+26:import android.webkit.WebView;
+27:import android.webkit.WebViewClient;
+37:import androidx.media3.exoplayer.hls.HlsMediaSource;
+39:import androidx.media3.datasource.DefaultHttpDataSource;
+40:import androidx.media3.common.MediaItem;
+57:    private WebView webView;
+85:        webView = new WebView(this);
+104:        webView.setWebViewClient(new WebViewClient() {
+106:            public void onPageFinished(WebView view, String url) {
+123:                    WebView view,
+326:            DefaultHttpDataSource.Factory httpFactory =
+327:                    new DefaultHttpDataSource.Factory()
+338:            HlsMediaSource mediaSource =
+339:                    new HlsMediaSource.Factory(httpFactory)
+340:                    .createMediaSource(MediaItem.fromUri(streamUrl));
+343:            player.setMediaSource(mediaSource);
+521:                broadcastPlayer.release();
+662:                intent.putExtra("stream_url", url);
+701:        public void playIsaflix(
+750:                    intent.putExtra("stream_url", url);
+1007:                                    result.optString("playback_url", "");
+========== JS PLAYBACK ==========
+1064-}
+1065-
+1066-
+1067-/* ISAFLIX_QUEUE_V2 */
+1068:function playIsaFlix(name, url, headers={}, queue=[], index=0) {
+1069-    if (!isHttp(url)) {
+1070-        alert('Geçerli video bağlantısı bulunamadı.');
+1071-        return;
+1072-    }
+--
+2357-
+2358-    const media = candidates.find(isDirectMedia);
+2359-
+2360-    if (media) {
+2361:        playIsaFlix(name, media, headers, item.queue || [], item.queueIndex || 0);
+2362-        return;
+2363-    }
+2364-
+2365-    const page = candidates.find(isHttp);
+--
+2384-
+2385-        headers.Referer = page;
+2386-        const playbackUrl = resolved || page;
+2387-
+2388:        playIsaFlix(
+2389-            name,
+2390-            playbackUrl,
+2391-            headers,
+2392-            item.queue || [],
+--
+3161-        const data = isaFlixCatalog();
+3162-        const category = isaFlixCategory(item,'live');
+3163-        const queue = isaFlixArray(data.live_channels)
+3164-            .filter(x => isaFlixCategory(x,'live') === category)
+3165:            .filter(x => /^https?:\/\//i.test(String(x.stream_url||'')))
+3166-            .map(x => ({
+3167-                name:x.name || 'Kanal',
+3168:                url:x.stream_url,
+3169-                logo:x.logo_url || x.image_url || x.poster_url || '',
+3170-                group:category,
+3171-                headers:isaFlixHeaders(x),
+3172-                is_live:true
+3173-            }));
+3174-
+3175:        const index = queue.findIndex(x => x.url === item.stream_url);
+3176-        if (index >= 0) play(queue[index],queue,index,true);
+3177-        else alert('Bu kanal için geçerli yayın bağlantısı bulunamadı.');
+3178-        return;
+3179-    }
+3180-
+3181-    if (mode === 'movies') {
+3182:        const url = item.stream_url || '';
+3183-        if (!/^https?:\/\//i.test(url)) {
+3184-            alert('Bu film için geçerli bağlantı bulunamadı.');
+3185-            return;
+3186-        }
+3187-
+3188-        const queue = isaFlixArray(isaFlixState.items)
+3189:            .filter(x => /^https?:\/\//i.test(String(x.stream_url || '')))
+3190-            .map(x => ({
+3191-                name:cleanMediaTitle(x.title || x.name || 'Film'),
+3192:                url:x.stream_url,
+3193-                logo:x.poster_url || x.image_url || '',
+3194-                group:isaFlixCategory(x,'movies'),
+3195-                headers:isaFlixHeaders(x),
+3196-                season:0,
+--
+3377-
+3378-    root.querySelectorAll('[data-isaf-episode]').forEach(button => {
+3379-        button.onclick = () => {
+3380-            const episode = sortedEpisodes[Number(button.dataset.isafEpisode)];
+3381:            const url = episode.stream_url || '';
+3382-
+3383-            const seasonNumber =
+3384-                isaFlixExplicitSeasonNumber(episode) ||
+3385-                (Number(number) > 0 ? Number(number) : 0);
+--
+3410-                            series_name: showName,
+3411-                            series_url: series.page_url || ''
+3412-                        };
+3413-
+3414:                        playIsaFlix(showName, playbackUrl, entry.headers, [entry], 0);
+3415-                    })
+3416-                    .catch(error => {
+3417-                        note.remove();
+3418-                        console.warn('Bölüm bağlantısı:', error);
+--
+3430-                            series_name: showName,
+3431-                            series_url: series.page_url || ''
+3432-                        };
+3433-
+3434:                        playIsaFlix(
+3435-                            showName,
+3436-                            episode.page_url,
+3437-                            entry.headers,
+3438-                            [entry],
+--

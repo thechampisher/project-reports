@@ -1,0 +1,180 @@
+    return respondJson({ ok: false, error: "Upstream request failed" }, 502);
+  }
+
+  const contentType = upstream.headers.get("Content-Type") || "";
+  const manifest = isManifest(currentUrl, contentType);
+
+  if (manifest) {
+    // Uzantısı tanınmayan alt oynatma listeleri ancak upstream
+    // Content-Type yanıtından sonra anlaşılabilir.
+    // Bu kontrol manifest başına yapılır; segmentlere uygulanmaz.
+    if (payload.kind === "resource") {
+      let active = false;
+
+      try {
+        active = await activePlaybackSession(env, payload);
+      } catch {
+        return respondJson({
+          ok: false,
+          error: "Playback authorization unavailable"
+        }, 503);
+      }
+
+      if (!active) {
+        return respondJson({
+          ok: false,
+          error: "Playback session revoked or expired"
+        }, 403);
+      }
+    }
+
+    const sourceText = await upstream.text();
+
+    if (sourceText.length > 2 * 1024 * 1024) {
+      return respondJson({ ok: false, error: "Manifest too large" }, 502);
+    }
+
+    let rewritten;
+
+    try {
+      rewritten = await rewriteManifest(
+        sourceText,
+        currentUrl,
+        env,
+        {
+          sid: payload.sid,
+          member_id: payload.member_id,
+          device_id: payload.device_id
+        }
+      );
+    } catch {
+      return respondJson({ ok: false, error: "Manifest rewrite failed" }, 502);
+    }
+
+    return new Response(rewritten, {
+      status: 200,
+      headers: mediaResponseHeaders(upstream, true, cors)
+    });
+  }
+
+  return new Response(upstream.body, {
+    status: upstream.status,
+    headers: mediaResponseHeaders(upstream, false, cors)
+  });
+}
+
+async function issuePlayback(env, member, deviceId, source, broadcastId = null) {
+  if (!source || source.status !== "active") {
+    return { error: "Stream unavailable" };
+  }
+
+  if (!allowedSource(source.source_url, env)) {
+    return { error: "Stream source is not permitted" };
+  }
+
+  const sid = uuid();
+  const ticket = await createMediaToken({
+    const broadcastId = String(body.broadcast_id).trim();
+
+    if (!broadcastId || broadcastId.length > 180) {
+      return json({ ok: false, error: "Invalid broadcast ID" }, 400);
+    }
+
+    {
+
+      const broadcast = await env.DB.prepare(`
+        SELECT b.id, b.stream_source_id, b.audience,
+               s.id AS source_id, s.source_url, s.status AS source_status
+        FROM broadcasts b
+        JOIN stream_sources s ON s.id = b.stream_source_id
+        WHERE b.id = ? AND b.status = 'live'
+        LIMIT 1
+      `).bind(broadcastId).first();
+
+      if (!broadcast || broadcast.source_status !== "active") {
+        return json({ ok: false, error: "Broadcast unavailable" }, 404);
+      }
+
+      const recipient = await env.DB.prepare(`
+        SELECT id
+        FROM broadcast_recipients
+        WHERE broadcast_id = ?
+          AND member_id = ?
+          AND status IN ('targeted', 'authorized')
+        LIMIT 1
+      `).bind(broadcastId, member.id).first();
+
+      if (!recipient) {
+        return json({ ok: false, error: "Not authorized for broadcast" }, 403);
+      }
+
+      await env.DB.prepare(`
+        UPDATE broadcast_recipients
+        SET status = 'authorized', authorized_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).bind(recipient.id).run();
+
+      source = {
+        id: broadcast.source_id,
+        source_url: broadcast.source_url,
+        status: broadcast.source_status
+      };
+    }
+
+    if (!source) {
+      return json({ ok: false, error: "Stream not found" }, 404);
+    }
+
+    const playback = await issuePlayback(
+      env,
+      member,
+      auth.deviceId,
+      source,
+      broadcastId
+    );
+
+    if (playback.error) {
+      return json({ ok: false, error: playback.error }, 403);
+    }
+
+    return json({ ok: true, ...playback });
+  }
+
+  return json({ ok: false, error: "Member endpoint not found" }, 404);
+}
+
+/* =========================================================
+   MAIN ROUTER
+   ========================================================= */
+
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    const path = url.pathname;
+    const method = request.method.toUpperCase();
+
+    const configuredOrigins = (env.APP_ORIGINS || "")
+      .split(",")
+      .map(x => x.trim())
+      .filter(Boolean);
+
+    const origin = request.headers.get("Origin") || "";
+    const allowOrigin = configuredOrigins.length
+      ? (configuredOrigins.includes(origin) ? origin : "")
+      : "*";
+
+    const cors = {
+      "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, OPTIONS",
+      "Access-Control-Allow-Headers": "Authorization, Content-Type, Range",
+      "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges",
+      "Vary": "Origin"
+    };
+
+    if (allowOrigin) cors["Access-Control-Allow-Origin"] = allowOrigin;
+
+    if (method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: cors
+      });
+    }

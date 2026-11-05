@@ -1,0 +1,180 @@
+3453-                    ...ep,
+3454-                    __season: isaFlixExplicitSeasonNumber(ep),
+3455-                    __episode: isaFlixExplicitEpisodeNumber(ep)
+3456-                }))
+3457:                .filter(ep => /^https?:\/\//i.test(String(ep.stream_url || '')))
+3458-                .sort((a, b) =>
+3459-                    a.__season - b.__season ||
+3460-                    a.__episode - b.__episode
+3461-                );
+--
+3463-            const showName = cleanMediaTitle(seriesTitle);
+3464-
+3465-            const queue = allEpisodes.map(ep => ({
+3466-                name: showName,
+3467:                url: ep.stream_url,
+3468-                logo: ep.image_url || series.poster_url || series.image_url || '',
+3469-                group: series.platform_name || 'Diziler',
+3470-                headers: isaFlixHeaders(ep),
+3471-                season: ep.__season,
+--
+3485-                alert('Bölüm oynatma listesine eklenemedi.');
+3486-                return;
+3487-            }
+3488-
+3489:            playIsaFlix(
+3490-                showName,
+3491-                url,
+3492-                isaFlixHeaders(episode),
+3493-                queue,
+========== WORKER ==========
+    return false;
+  }
+}
+
+async function audit(env, action, targetId = null, details = null, actor = "admin") {
+  try {
+    await env.DB.prepare(`
+      INSERT INTO audit_logs
+        (id, actor_type, actor_id, action, target_type, target_id, details)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      uuid(),
+      actor,
+      actor === "admin" ? "admin" : actor,
+      action,
+      null,
+      targetId,
+      details ? JSON.stringify(details) : null
+    ).run();
+  } catch {
+    // Audit failure must not expose secrets or break media delivery.
+  }
+}
+
+/* =========================================================
+   ENCRYPTED STATELESS MEDIA TOKENS
+
+   HLS resources are encrypted in the token itself.
+   No D1 query or write occurs for individual video segments.
+   ========================================================= */
+
+async function mediaKey(env) {
+  if (!env.TOKEN_SIGNING_SECRET || env.TOKEN_SIGNING_SECRET.length < 32) {
+    throw new Error("TOKEN_SIGNING_SECRET missing");
+  }
+
+  const raw = await crypto.subtle.digest(
+    "SHA-256",
+    encoder.encode(env.TOKEN_SIGNING_SECRET + "|media-token-v1")
+  );
+
+  return crypto.subtle.importKey(
+    "raw",
+    raw,
+    { name: "AES-GCM" },
+    false,
+    ["encrypt", "decrypt"]
+  );
+}
+
+async function createMediaToken(payload, env, lifetime) {
+  const data = encoder.encode(JSON.stringify({
+    ...payload,
+    exp: nowSeconds() + lifetime,
+    ver: 1
+  }));
+
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+
+  const encrypted = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    await mediaKey(env),
+    data
+  );
+
+  return `${b64url(iv)}.${b64url(new Uint8Array(encrypted))}`;
+}
+
+async function readMediaToken(token, env) {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 2) return null;
+
+    const decrypted = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: unb64url(parts[0]) },
+      await mediaKey(env),
+      unb64url(parts[1])
+    );
+
+    const payload = JSON.parse(decoder.decode(decrypted));
+
+    if (payload.ver !== 1 ||
+        !payload.exp ||
+        payload.exp <= nowSeconds()) return null;
+
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+async function makeResourceUrl(sourceUrl, env, session) {
+  if (!allowedSource(sourceUrl, env)) {
+    throw new Error("Source host is not allowed");
+  }
+
+  // Playlist kaynakları oturum kontrolünden geçer.
+  // Segment ve medya kaynakları stateless kalır.
+  const kind = isManifest(sourceUrl, "")
+    ? "manifest"
+    : "resource";
+
+  const token = await createMediaToken({
+    kind,
+    url: sourceUrl,
+    sid: session.sid,
+    member_id: session.member_id,
+    device_id: session.device_id
+  }, env, PLAYBACK_TOKEN_SECONDS);
+
+  return `/p/${token}`;
+}
+
+function isManifest(url, contentType) {
+  return /\.m3u8?($|\?)/i.test(url) ||
+    /mpegurl|vnd\.apple\.mpegurl/i.test(contentType || "");
+}
+
+async function rewriteManifest(text, baseUrl, env, session) {
+  const lines = text.split(/\r?\n/);
+  const output = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      output.push(line);
+      continue;
+    }
+
+    if (trimmed.startsWith("#")) {
+      const rewritten = await rewriteUriAttributes(
+        line, baseUrl, env, session
+      );
+      output.push(rewritten);
+      continue;
+    }
+
+    const absolute = new URL(trimmed, baseUrl).toString();
+    output.push(await makeResourceUrl(absolute, env, session));
+  }
+
+  return output.join("\n");
+}
+
+async function rewriteUriAttributes(line, baseUrl, env, session) {
+  const regex = /URI="([^"]+)"/g;
+  let result = line;
+  const matches = [...line.matchAll(regex)];
+

@@ -1,0 +1,93 @@
+      broadcastId
+    );
+
+    if (playback.error) {
+      return json({ ok: false, error: playback.error }, 403);
+    }
+
+    return json({ ok: true, ...playback });
+  }
+
+  return json({ ok: false, error: "Member endpoint not found" }, 404);
+}
+
+/* =========================================================
+   MAIN ROUTER
+   ========================================================= */
+
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    const path = url.pathname;
+    const method = request.method.toUpperCase();
+
+    const configuredOrigins = (env.APP_ORIGINS || "")
+      .split(",")
+      .map(x => x.trim())
+      .filter(Boolean);
+
+    const origin = request.headers.get("Origin") || "";
+    const allowOrigin = configuredOrigins.length
+      ? (configuredOrigins.includes(origin) ? origin : "")
+      : "*";
+
+    const cors = {
+      "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, OPTIONS",
+      "Access-Control-Allow-Headers": "Authorization, Content-Type, Range",
+      "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges",
+      "Vary": "Origin"
+    };
+
+    if (allowOrigin) cors["Access-Control-Allow-Origin"] = allowOrigin;
+
+    if (method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: cors
+      });
+    }
+
+    try {
+      if (path === "/health" && method === "GET") {
+        return json({
+          ok: true,
+          version: VERSION,
+          service: "stream-access-service"
+        }, 200, cors);
+      }
+
+      if (path.startsWith("/play/") && method === "GET") {
+        const ticket = path.slice("/play/".length);
+        return proxyMedia(request, env, ticket, cors);
+      }
+
+      if (path.startsWith("/p/") && method === "GET") {
+        const ticket = path.slice("/p/".length);
+        return proxyMedia(request, env, ticket, cors);
+      }
+
+      if (path.startsWith("/auth/") && method === "POST") {
+        return handleLogin(request, env, path);
+      }
+
+      if (path.startsWith("/admin/")) {
+        const admin = await adminAuth(request, env);
+        if (!admin) {
+          return json({ ok: false, error: "Unauthorized" }, 401, cors);
+        }
+
+        if (path.startsWith("/admin/github/")) {
+          return handleGithub(request, env, url, method);
+        }
+
+        return handleAdmin(request, env, path, method);
+      }
+
+===== GRADLE DEPENDENCIES =====
+/data/data/com.termux/files/home/app-work/app/build.gradle:7:    compileSdk 34
+/data/data/com.termux/files/home/app-work/app/build.gradle:12:        minSdk 24
+/data/data/com.termux/files/home/app-work/app/build.gradle:13:        targetSdk 34
+/data/data/com.termux/files/home/app-work/app/build.gradle:28:    implementation 'androidx.media3:media3-exoplayer:1.4.1'
+/data/data/com.termux/files/home/app-work/app/build.gradle:29:    implementation 'androidx.media3:media3-exoplayer-hls:1.4.1'
+/data/data/com.termux/files/home/app-work/app/build.gradle:30:    implementation 'androidx.media3:media3-exoplayer-dash:1.4.1'
+/data/data/com.termux/files/home/app-work/app/build.gradle:31:    implementation 'androidx.media3:media3-ui:1.4.1'

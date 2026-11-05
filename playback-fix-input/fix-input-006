@@ -1,0 +1,180 @@
+3406-                            episode: episodeNumber,
+3407-                            is_live: false,
+3408-                            is_series: true,
+3409-                            series_id: series.id || series.series_id || series.page_url,
+3410-                            series_name: showName,
+3411-                            series_url: series.page_url || ''
+3412-                        };
+3413-
+3414:                        playIsaFlix(showName, playbackUrl, entry.headers, [entry], 0);
+3415-                    })
+3416-                    .catch(error => {
+3417-                        note.remove();
+3418-                        console.warn('Bölüm bağlantısı:', error);
+3419-
+3420-                        const showName = cleanMediaTitle(seriesTitle);
+3421-                        const entry = {
+3422-                            name: showName,
+3423-                            url: episode.page_url,
+3424:                            headers: {Referer: episode.page_url},
+3425-                            season: seasonNumber,
+3426-                            episode: episodeNumber,
+3427-                            is_live: false,
+3428-                            is_series: true,
+3429-                            series_id: series.id || series.series_id || series.page_url,
+3430-                            series_name: showName,
+3431-                            series_url: series.page_url || ''
+3432-                        };
+3433-
+3434:                        playIsaFlix(
+3435-                            showName,
+3436-                            episode.page_url,
+3437:                            entry.headers,
+3438-                            [entry],
+3439-                            0
+3440-                        );
+3441-                    });
+3442-
+--
+3452-                .map(ep => ({
+3453-                    ...ep,
+3454-                    __season: isaFlixExplicitSeasonNumber(ep),
+3455-                    __episode: isaFlixExplicitEpisodeNumber(ep)
+3456-                }))
+3457:                .filter(ep => /^https?:\/\//i.test(String(ep.stream_url || '')))
+3458-                .sort((a, b) =>
+3459-                    a.__season - b.__season ||
+3460-                    a.__episode - b.__episode
+3461-                );
+3462-
+3463-            const showName = cleanMediaTitle(seriesTitle);
+3464-
+3465-            const queue = allEpisodes.map(ep => ({
+3466-                name: showName,
+3467:                url: ep.stream_url,
+3468-                logo: ep.image_url || series.poster_url || series.image_url || '',
+3469-                group: series.platform_name || 'Diziler',
+3470:                headers: isaFlixHeaders(ep),
+3471-                season: ep.__season,
+3472-                episode: ep.__episode,
+3473-                is_live: false
+3474-            }));
+3475-
+--
+3484-            if (index < 0) {
+3485-                alert('Bölüm oynatma listesine eklenemedi.');
+3486-                return;
+3487-            }
+3488-
+3489:            playIsaFlix(
+3490-                showName,
+3491-                url,
+3492-                isaFlixHeaders(episode),
+3493-                queue,
+3494-                index
+===== WORKER: TOKEN / RESOURCE URL =====
+    return false;
+  }
+}
+
+async function audit(env, action, targetId = null, details = null, actor = "admin") {
+  try {
+    await env.DB.prepare(`
+      INSERT INTO audit_logs
+        (id, actor_type, actor_id, action, target_type, target_id, details)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      uuid(),
+      actor,
+      actor === "admin" ? "admin" : actor,
+      action,
+      null,
+      targetId,
+      details ? JSON.stringify(details) : null
+    ).run();
+  } catch {
+    // Audit failure must not expose secrets or break media delivery.
+  }
+}
+
+/* =========================================================
+   ENCRYPTED STATELESS MEDIA TOKENS
+
+   HLS resources are encrypted in the token itself.
+   No D1 query or write occurs for individual video segments.
+   ========================================================= */
+
+async function mediaKey(env) {
+  if (!env.TOKEN_SIGNING_SECRET || env.TOKEN_SIGNING_SECRET.length < 32) {
+    throw new Error("TOKEN_SIGNING_SECRET missing");
+  }
+
+  const raw = await crypto.subtle.digest(
+    "SHA-256",
+    encoder.encode(env.TOKEN_SIGNING_SECRET + "|media-token-v1")
+  );
+
+  return crypto.subtle.importKey(
+    "raw",
+    raw,
+    { name: "AES-GCM" },
+    false,
+    ["encrypt", "decrypt"]
+  );
+}
+
+async function createMediaToken(payload, env, lifetime) {
+  const data = encoder.encode(JSON.stringify({
+    ...payload,
+    exp: nowSeconds() + lifetime,
+    ver: 1
+  }));
+
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+
+  const encrypted = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    await mediaKey(env),
+    data
+  );
+
+  return `${b64url(iv)}.${b64url(new Uint8Array(encrypted))}`;
+}
+
+async function readMediaToken(token, env) {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 2) return null;
+
+    const decrypted = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: unb64url(parts[0]) },
+      await mediaKey(env),
+      unb64url(parts[1])
+    );
+
+    const payload = JSON.parse(decoder.decode(decrypted));
+
+    if (payload.ver !== 1 ||
+        !payload.exp ||
+        payload.exp <= nowSeconds()) return null;
+
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+async function makeResourceUrl(sourceUrl, env, session) {
+  if (!allowedSource(sourceUrl, env)) {
+    throw new Error("Source host is not allowed");
+  }
+
+  // Playlist kaynakları oturum kontrolünden geçer.
+  // Segment ve medya kaynakları stateless kalır.
+  const kind = isManifest(sourceUrl, "")
+    ? "manifest"
+    : "resource";
+
+  const token = await createMediaToken({
+    kind,
+    url: sourceUrl,

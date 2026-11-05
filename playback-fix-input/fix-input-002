@@ -1,0 +1,180 @@
+  for (const match of matches) {
+    const original = match[1];
+    const absolute = new URL(original, baseUrl).toString();
+    const replacement = await makeResourceUrl(absolute, env, session);
+    result = result.replace(
+      `URI="${original}"`,
+      `URI="${replacement}"`
+    );
+  }
+
+  return result;
+}
+
+function mediaResponseHeaders(upstream, manifest = false, cors = {}) {
+  const headers = new Headers(cors);
+
+  const type = upstream.headers.get("Content-Type");
+  if (type) headers.set("Content-Type", type);
+
+  for (const name of [
+    "Content-Range",
+    "Accept-Ranges",
+    "Content-Length"
+  ]) {
+    const value = upstream.headers.get(name);
+    if (value && !manifest) headers.set(name, value);
+  }
+
+  headers.set("Cache-Control", "private, no-store");
+  headers.set("X-Content-Type-Options", "nosniff");
+
+  return headers;
+}
+
+async function activePlaybackSession(env, payload) {
+  if (!payload?.sid || !payload?.member_id || !payload?.device_id) {
+    return false;
+  }
+
+  // Bu sorgu yalnızca ana/alt oynatma listelerinde çalışır.
+  // Video segmentleri bu fonksiyona uğramaz.
+  const session = await env.DB.prepare(`
+    SELECT ps.id
+    FROM playback_sessions ps
+    JOIN members m
+      ON m.id = ps.member_id
+    JOIN devices d
+      ON d.member_id = ps.member_id
+     AND d.device_id = ps.device_id
+    LEFT JOIN broadcasts b
+      ON b.id = ps.broadcast_id
+    WHERE ps.id = ?
+      AND ps.member_id = ?
+      AND ps.device_id = ?
+      AND ps.status = 'active'
+      AND ps.expires_at > ?
+      AND m.status = 'active'
+      AND d.status = 'active'
+      AND (
+        m.expires_at IS NULL
+        OR m.expires_at = ''
+        OR julianday(m.expires_at) > julianday('now')
+      )
+      AND (
+        ps.broadcast_id IS NULL
+        OR b.status = 'live'
+      )
+    LIMIT 1
+  `).bind(
+    payload.sid,
+    payload.member_id,
+    payload.device_id,
+    nowSeconds()
+  ).first();
+
+  return Boolean(session);
+}
+
+async function proxyMedia(request, env, token, cors = {}) {
+  const respondJson = (data, status) => json(data, status, cors);
+  const payload = await readMediaToken(token, env);
+
+  if (!payload ||
+      !["play", "manifest", "resource"].includes(payload.kind) ||
+      !payload.url ||
+      !payload.sid ||
+      !allowedSource(payload.url, env)) {
+    return respondJson({ ok: false, error: "Invalid or expired playback token" }, 403);
+  }
+
+  // Ana ve alt oynatma listelerinde iptal kontrolü.
+  // Segment tokenlarında D1 sorgusu kesinlikle yapılmaz.
+  if (payload.kind === "play" || payload.kind === "manifest") {
+    let active = false;
+
+    try {
+      active = await activePlaybackSession(env, payload);
+    } catch {
+      return respondJson({ ok: false, error: "Playback authorization unavailable" }, 503);
+    }
+
+    if (!active) {
+      return respondJson({ ok: false, error: "Playback session revoked or expired" }, 403);
+    }
+  }
+
+  const headers = new Headers({
+    "Accept": request.headers.get("Accept") || "*/*",
+    "User-Agent": "MediaProxy/2.0"
+  });
+
+  try {
+    const sourceHost = new URL(payload.url).hostname.toLowerCase();
+    if (sourceHost === "andro.evrenesoglu101.click") {
+      headers.set("Referer", "https://taraftarium24.xyz/");
+      headers.set("Origin", "https://taraftarium24.xyz");
+    }
+  } catch (_) {}
+
+
+  const range = request.headers.get("Range");
+  if (range) headers.set("Range", range);
+
+  let upstream;
+  let currentUrl = payload.url;
+
+  // Yönlendirmeleri kontrollü takip et.
+  // Her yeni adres yeniden doğrulanır.
+  for (let redirectCount = 0; redirectCount <= 5; redirectCount++) {
+    if (!allowedSource(currentUrl, env)) {
+      return respondJson({
+        ok: false,
+        error: "Redirect source is not permitted"
+      }, 502);
+    }
+
+    try {
+      upstream = await fetch(currentUrl, {
+        method: "GET",
+        headers,
+        redirect: "manual"
+      });
+    } catch {
+      return respondJson({
+        ok: false,
+        error: "Upstream unavailable"
+      }, 502);
+    }
+
+    if (upstream.status < 300 || upstream.status >= 400) {
+      break;
+    }
+
+    const location = upstream.headers.get("Location");
+
+    if (!location || redirectCount === 5) {
+      return respondJson({
+        ok: false,
+        error: "Redirect limit exceeded"
+      }, 502);
+    }
+
+    try {
+      currentUrl = new URL(location, currentUrl).toString();
+    } catch {
+      return respondJson({
+        ok: false,
+        error: "Invalid redirect address"
+      }, 502);
+    }
+  }
+
+  if (!upstream || (upstream.status >= 300 && upstream.status < 400)) {
+    return respondJson({
+      ok: false,
+      error: "Upstream redirect failed"
+    }, 502);
+  }
+
+  if (!upstream.ok && upstream.status !== 206) {
